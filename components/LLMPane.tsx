@@ -7,7 +7,7 @@ import { KeyInput } from "@/components/KeyInput"
 import { DEFAULT_SYSTEM_PROMPT } from "@/lib/prompts/system"
 import { getSettings, getModelDisplayName } from "@/lib/settings"
 import { parseLLMResponse } from "@/lib/llm/parser"
-import { LLMReplacement } from "@/lib/types"
+import { LLMReplacement, LLMInsertion } from "@/lib/types"
 
 interface Message {
     id: string
@@ -15,7 +15,9 @@ interface Message {
     content: string
     timestamp: Date
     replacements?: LLMReplacement[]
+    insertions?: LLMInsertion[]
     usedReplacements?: Set<string> // Track which replacements have been used
+    usedInsertions?: Set<string> // Track which insertions have been used
   }
 
 interface LLMPaneProps {
@@ -56,10 +58,11 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
           // Convert timestamp strings back to Date objects and filter out system messages
           const messagesWithDates = parsedMessages
             .filter((msg: { role: string }) => msg.role !== "system")
-            .map((msg: { role: string; content: string; timestamp: string; id: string; usedReplacements?: string[] }) => ({
+            .map((msg: { role: string; content: string; timestamp: string; id: string; usedReplacements?: string[]; usedInsertions?: string[] }) => ({
               ...msg,
               timestamp: new Date(msg.timestamp),
-              usedReplacements: msg.usedReplacements ? new Set(msg.usedReplacements) : new Set()
+              usedReplacements: msg.usedReplacements ? new Set(msg.usedReplacements) : new Set(),
+              usedInsertions: msg.usedInsertions ? new Set(msg.usedInsertions) : new Set()
             }))
           setMessages(messagesWithDates)
         }
@@ -76,7 +79,8 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
         // Convert Set objects to arrays for JSON serialization
         const serializedMessages = messagesToSaveFiltered.map(msg => ({
           ...msg,
-          usedReplacements: msg.usedReplacements ? Array.from(msg.usedReplacements) : []
+          usedReplacements: msg.usedReplacements ? Array.from(msg.usedReplacements) : [],
+          usedInsertions: msg.usedInsertions ? Array.from(msg.usedInsertions) : []
         }))
         localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(serializedMessages))
         setIsSaving(false)
@@ -200,7 +204,8 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
           role: "user",
           content: input,
           timestamp: new Date(Date.now()),
-          usedReplacements: new Set()
+          usedReplacements: new Set(),
+          usedInsertions: new Set()
         }
     
         const newMessages = [...messages, userMessage]
@@ -221,9 +226,10 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
         const assistantMessage: Message = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: "",
+          content: "Generating...",
           timestamp: new Date(Date.now()),
-          usedReplacements: new Set()
+          usedReplacements: new Set(),
+          usedInsertions: new Set()
         }
     
         setMessages(prev => {
@@ -273,6 +279,9 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
           const reader = res.body.getReader()
           const decoder = new TextDecoder()
           let partial = ""
+          let rawJsonResponse = ""
+          let hasStartedStreaming = false
+          let lastParsedResponse = ""
 
           while (true) {
             const { done, value } = await reader.read()
@@ -284,22 +293,50 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
               if (!trimmed.startsWith("data:")) continue
               const data = trimmed.slice(5).trim()
               if (data === "[DONE]") {
-                // Parse the final response and update with structured data
-                setMessages(prev => {
-                  const finalMessages = prev.map((msg) => {
-                    if (msg.id === assistantMessage.id) {
-                      const { response, replacements } = parseLLMResponse(msg.content)
-                      return { 
-                        ...msg, 
-                        content: response,
-                        replacements: replacements
-                      }
-                    }
-                    return msg
+                // Final parsing to extract structured data
+                try {
+                  const finalParsed = parseLLMResponse(rawJsonResponse)
+                  if (finalParsed.response && finalParsed.response !== rawJsonResponse) {
+                    // Successfully parsed final JSON
+                    setMessages(prev => {
+                      const finalMessages = prev.map((msg) => {
+                        if (msg.id === assistantMessage.id) {
+                          return { 
+                            ...msg, 
+                            content: finalParsed.response,
+                            replacements: finalParsed.replacements,
+                            insertions: finalParsed.insertions
+                          }
+                        }
+                        return msg
+                      })
+                      debouncedSaveChat(finalMessages)
+                      return finalMessages
+                    })
+                  } else {
+                    // JSON was incomplete - show error state
+                    setMessages(prev => {
+                      const errorMessages = prev.map((msg) =>
+                        msg.id === assistantMessage.id
+                          ? { ...msg, content: "❌ LLM response was incomplete. Please try regenerating the response." }
+                          : msg
+                      )
+                      debouncedSaveChat(errorMessages)
+                      return errorMessages
+                    })
+                  }
+                } catch {
+                  // Final parsing failed - show error state
+                  setMessages(prev => {
+                    const errorMessages = prev.map((msg) =>
+                      msg.id === assistantMessage.id
+                        ? { ...msg, content: "❌ LLM response was malformed. Please try regenerating the response." }
+                        : msg
+                    )
+                    debouncedSaveChat(errorMessages)
+                    return errorMessages
                   })
-                  debouncedSaveChat(finalMessages)
-                  return finalMessages
-                })
+                }
                 return
               }
 
@@ -307,16 +344,62 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
                 const json = JSON.parse(data)
                 const delta = json?.choices?.[0]?.delta?.content
                 if (delta) {
-                  setMessages(prev => {
-                    const updatedMessages = prev.map((msg) =>
-                      msg.id === assistantMessage.id
-                        ? { ...msg, content: msg.content + delta }
-                        : msg
-                    )
-                    // Trigger autosave during streaming
-                    debouncedSaveChat(updatedMessages)
-                    return updatedMessages
-                  })
+                  // Accumulate the raw JSON response
+                  rawJsonResponse += delta
+                  
+                  // Try to parse the accumulated JSON to extract text chunks
+                  try {
+                    const parsed = parseLLMResponse(rawJsonResponse)
+                    if (parsed.response && parsed.response !== "Generating..." && parsed.response !== rawJsonResponse && parsed.response.trim() !== "") {
+                      // We have valid parsed text - stream it immediately
+                      if (!hasStartedStreaming) {
+                        hasStartedStreaming = true
+                        console.log("Starting to stream parsed content")
+                      }
+                      
+                      // Only update if we have new content to show
+                      if (parsed.response !== lastParsedResponse) {
+                        console.log("Streaming new content:", parsed.response.substring(lastParsedResponse.length, lastParsedResponse.length + 50) + "...")
+                        setMessages(prev => {
+                          const updatedMessages = prev.map((msg) =>
+                            msg.id === assistantMessage.id
+                              ? { 
+                                  ...msg, 
+                                  content: parsed.response,
+                                  replacements: parsed.replacements,
+                                  insertions: parsed.insertions
+                                }
+                              : msg
+                          )
+                          return updatedMessages
+                        })
+                        lastParsedResponse = parsed.response
+                      }
+                    } else if (parsed.replacements.length > 0 || parsed.insertions.length > 0) {
+                      // We have structured data even if no response text yet
+                      console.log("Detected structured data:", {
+                        replacements: parsed.replacements.length,
+                        insertions: parsed.insertions.length
+                      })
+                      setMessages(prev => {
+                        const updatedMessages = prev.map((msg) =>
+                          msg.id === assistantMessage.id
+                            ? { 
+                                ...msg, 
+                                content: parsed.response || msg.content,
+                                replacements: parsed.replacements,
+                                insertions: parsed.insertions
+                              }
+                            : msg
+                        )
+                        return updatedMessages
+                      })
+                    }
+                  } catch {
+                    // Parsing failed - keep accumulating JSON
+                    console.log("Parsing failed, continuing to accumulate JSON")
+                  }
+                  
                   scrollToBottom()
                 }
               } catch (parseError) {
@@ -490,15 +573,52 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   (window as any).replaceSelectedText(replacement.text)
                   
-                  // Mark this replacement as used
-                  setMessages(prev => prev.map(message => 
-                    message.id === msg.id 
-                      ? { 
-                          ...message, 
-                          usedReplacements: new Set([...(message.usedReplacements || []), replacementId])
-                        }
-                      : message
-                  ))
+                  // Mark this replacement as used and save immediately
+                  setMessages(prev => {
+                    const updatedMessages = prev.map(message => 
+                      message.id === msg.id 
+                        ? { 
+                            ...message, 
+                            usedReplacements: new Set([...(message.usedReplacements || []), replacementId])
+                          }
+                        : message
+                    )
+                    // Save immediately after updating
+                    debouncedSaveChat(updatedMessages)
+                    return updatedMessages
+                  })
+                }
+              }
+              
+              const handleInsertionUsed = (insertionId: string) => {
+                console.log('handleInsertionUsed called with insertionId:', insertionId)
+                // Find the insertion text
+                const insertion = msg.insertions?.find(i => i.id === insertionId)
+                console.log('Found insertion:', insertion)
+                if (insertion && typeof window !== 'undefined' && 'insertTextAtCursor' in window) {
+                  console.log('Calling insertTextAtCursor with text:', insertion.text)
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const insertFunction = (window as any).insertTextAtCursor
+                  if (typeof insertFunction === 'function') {
+                    insertFunction(insertion.text)
+                  }
+                  
+                  // Mark this insertion as used and save immediately
+                  setMessages(prev => {
+                    const updatedMessages = prev.map(message => 
+                      message.id === msg.id 
+                        ? { 
+                            ...message, 
+                            usedInsertions: new Set([...(message.usedInsertions || []), insertionId])
+                          }
+                        : message
+                    )
+                    // Save immediately after updating
+                    debouncedSaveChat(updatedMessages)
+                    return updatedMessages
+                  })
+                } else {
+                  console.error('insertTextAtCursor function not found on window object')
                 }
               }
               
@@ -509,8 +629,11 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
                     content={msg.content}
                     timestamp={msg.timestamp}
                     replacements={msg.replacements}
+                    insertions={msg.insertions}
                     usedReplacements={msg.usedReplacements}
+                    usedInsertions={msg.usedInsertions}
                     onReplacementUsed={handleReplacementUsed}
+                    onInsertionUsed={handleInsertionUsed}
                   />
                 </div>
               )

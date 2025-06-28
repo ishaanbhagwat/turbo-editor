@@ -129,36 +129,69 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
     const afterSelection = content.substring(currentSelection.end)
     const newContent = beforeSelection + newText + afterSelection
     
+    // Calculate new selection range for the inserted text
+    const newStart = currentSelection.start
+    const newEnd = currentSelection.start + newText.length
+
     setContent(newContent)
     debouncedSave(newContent)
     
-    // Clear the selection after replacement
-    setCurrentSelection(null)
-    setIsSelectionPersistent(false)
+    // Set the new selection to the replaced text and make it persistent
+    setCurrentSelection({ start: newStart, end: newEnd, text: newText })
+    setIsSelectionPersistent(true)
     
-    // Focus back to textarea and set cursor position after the replaced text
+    // Focus back to textarea and set selection to the new text
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus()
-        const newCursorPosition = currentSelection.start + newText.length
-        textareaRef.current.setSelectionRange(newCursorPosition, newCursorPosition)
+        textareaRef.current.setSelectionRange(newStart, newEnd)
       }
     }, 100)
   }, [currentSelection, content, debouncedSave])
 
-  // Expose replaceSelectedText function to parent component
+  // Function to insert text at current cursor position
+  const insertTextAtCursor = useCallback((textToInsert: string) => {
+    if (!textareaRef.current) return
+
+    const textarea = textareaRef.current
+    const cursorPosition = textarea.selectionStart
+    
+    const beforeCursor = content.substring(0, cursorPosition)
+    const afterCursor = content.substring(cursorPosition)
+    const newContent = beforeCursor + textToInsert + afterCursor
+    
+    // Calculate new cursor position after insertion
+    const newCursorPosition = cursorPosition + textToInsert.length
+
+    setContent(newContent)
+    debouncedSave(newContent)
+    
+    // Focus back to textarea and set cursor position after the inserted text
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus()
+        textareaRef.current.setSelectionRange(newCursorPosition, newCursorPosition)
+      }
+    }, 100)
+  }, [content, debouncedSave])
+
+  // Expose replaceSelectedText and insertTextAtCursor functions to parent component
   useEffect(() => {
     if (onTextSelect) {
-      // Add the replace function to the window object for global access
+      // Add the replace and insert functions to the window object for global access
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(window as any).replaceSelectedText = replaceSelectedText
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).insertTextAtCursor = insertTextAtCursor
     }
     
     return () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delete (window as any).replaceSelectedText
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (window as any).insertTextAtCursor
     }
-  }, [currentSelection, content, onTextSelect, replaceSelectedText])
+  }, [currentSelection, content, onTextSelect, replaceSelectedText, insertTextAtCursor])
 
   // Update selection styling based on persistent state
   useEffect(() => {

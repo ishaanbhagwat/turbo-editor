@@ -1,16 +1,29 @@
 import { cn } from "@/lib/utils"
-import { LLMReplacement } from "@/lib/types"
+import { LLMReplacement, LLMInsertion } from "@/lib/types"
 
 interface ChatMessageProps {
   role: "user" | "assistant" | "system"
   content: string
   timestamp?: Date
   replacements?: LLMReplacement[]
+  insertions?: LLMInsertion[]
   usedReplacements?: Set<string>
+  usedInsertions?: Set<string>
   onReplacementUsed?: (replacementId: string) => void
+  onInsertionUsed?: (insertionId: string) => void
 }
 
-export function ChatMessage({ role, content, timestamp, replacements, usedReplacements, onReplacementUsed }: ChatMessageProps) {
+export function ChatMessage({ 
+  role, 
+  content, 
+  timestamp, 
+  replacements, 
+  insertions,
+  usedReplacements, 
+  usedInsertions,
+  onReplacementUsed, 
+  onInsertionUsed 
+}: ChatMessageProps) {
   const isUser = role === "user"
   const isSystem = role === "system"
 
@@ -96,46 +109,102 @@ export function ChatMessage({ role, content, timestamp, replacements, usedReplac
 
   // Function to render content with replacement containers
   const renderContent = () => {
-    console.log('ChatMessage renderContent - role:', role, 'replacements:', replacements)
+    console.log('ChatMessage renderContent - role:', role, 'replacements:', replacements, 'insertions:', insertions)
     console.log('ChatMessage - content:', content)
     
-    if (!replacements || replacements.length === 0 || role !== "assistant") {
-      console.log('No replacements or not assistant, rendering plain text')
+    // Special handling for "Generating..." state
+    if (content === "Generating...") {
+      return (
+        <div className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+          <div className="flex items-center gap-2">
+            <div className="flex space-x-1">
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+            </div>
+            <span className="text-gray-500 dark:text-gray-400">Generating...</span>
+          </div>
+        </div>
+      )
+    }
+    
+    if ((!replacements || replacements.length === 0) && (!insertions || insertions.length === 0) || role !== "assistant") {
+      console.log('No replacements/insertions or not assistant, rendering plain text')
       return <div className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">{renderFormattedText(content)}</div>
     }
 
-    console.log('Processing replacements for assistant message')
+    console.log('Processing replacements and insertions for assistant message')
 
   return (
       <div className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
-        {/* Render the main text content - this should be clean without replacement blocks */}
+        {/* Render the main text content - this should be clean without replacement/insertion blocks */}
         <div>{renderFormattedText(content)}</div>
         
         {/* Render replacement containers */}
-        {replacements.map((replacement, index) => {
+        {replacements?.map((replacement, index) => {
           const isUsed = usedReplacements?.has(replacement.id)
-          console.log('Rendering replacement container:', replacement.text, 'isUsed:', isUsed)
+          const isStreaming = !replacement.text || replacement.text.endsWith('…') || replacement.text.endsWith('...')
           return (
-            <div key={index} className="my-3">
+            <div key={`replacement-${replacement.id || index}`} className="my-3">
               <div className={cn(
-                "bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 p-3 text-sm",
+                // Replacement: yellow theme
+                "bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 p-3 text-sm",
                 isUsed && "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700"
               )}>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mb-2 font-medium">
+                <div className="text-xs text-yellow-600 dark:text-yellow-400 mb-2 font-medium">
                   {isUsed ? "✓ Applied" : "Suggested Replacement"}
                 </div>
                 {replacement.description && (
-                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                  <div className="text-xs text-yellow-600 dark:text-yellow-400 mb-2">
                     {replacement.description}
                   </div>
                 )}
-                <div className="text-gray-800 dark:text-gray-200 font-mono text-sm leading-relaxed whitespace-pre-wrap">{replacement.text}</div>
-                {!isUsed && onReplacementUsed && (
+                <div className="text-yellow-800 dark:text-yellow-200 font-mono text-sm leading-relaxed whitespace-pre-wrap min-h-[1.5em]">
+                  {replacement.text || <span className="italic text-gray-400">Streaming...</span>}
+                  {isStreaming && <span className="ml-2 animate-pulse text-xs text-gray-400">⏳</span>}
+                </div>
+                {!isUsed && onReplacementUsed && !isStreaming && (
                   <button
                     onClick={() => onReplacementUsed(replacement.id)}
-                    className="mt-3 text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-md transition-colors font-medium"
+                    className="mt-3 text-xs bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded-md transition-colors font-medium"
                   >
                     Apply Replacement
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+        
+        {/* Render insertion containers */}
+        {insertions?.map((insertion, index) => {
+          const isUsed = usedInsertions?.has(insertion.id)
+          const isStreaming = !insertion.text || insertion.text.endsWith('…') || insertion.text.endsWith('...')
+          return (
+            <div key={`insertion-${insertion.id || index}`} className="my-3">
+              <div className={cn(
+                // Insertion: blue theme
+                "bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 p-3 text-sm",
+                isUsed && "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700"
+              )}>
+                <div className="text-xs text-blue-600 dark:text-blue-400 mb-2 font-medium">
+                  {isUsed ? "✓ Inserted" : "Suggested Insertion"}
+                </div>
+                {insertion.description && (
+                  <div className="text-xs text-blue-600 dark:text-blue-400 mb-2">
+                    {insertion.description}
+                  </div>
+                )}
+                <div className="text-blue-800 dark:text-blue-200 font-mono text-sm leading-relaxed whitespace-pre-wrap min-h-[1.5em]">
+                  {insertion.text || <span className="italic text-gray-400">Streaming...</span>}
+                  {isStreaming && <span className="ml-2 animate-pulse text-xs text-gray-400">⏳</span>}
+                </div>
+                {!isUsed && onInsertionUsed && !isStreaming && (
+                  <button
+                    onClick={() => onInsertionUsed(insertion.id)}
+                    className="mt-3 text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-md transition-colors font-medium"
+                  >
+                    Insert at Cursor
                   </button>
                 )}
               </div>

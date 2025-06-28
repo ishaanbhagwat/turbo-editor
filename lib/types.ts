@@ -3,19 +3,21 @@ export interface LLMReplacement {
   id: string
   text: string
   description: string
+  type: 'replacement' | 'insertion'
+}
+
+export interface LLMInsertion {
+  id: string
+  text: string
+  description: string
 }
 
 export interface LLMResponse {
   response: string
   replacements: LLMReplacement[]
+  insertions?: LLMInsertion[]
   metadata?: {
     model?: string
     timestamp?: string
   }
-}
-
-// Fallback response structure for backward compatibility
-export interface FallbackResponse {
-  content: string
-  replacements: Array<{ id: string; text: string; startIndex: number }>
 } 

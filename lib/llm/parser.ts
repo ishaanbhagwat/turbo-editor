@@ -1,6 +1,6 @@
-import { LLMReplacement, FallbackResponse } from '@/lib/types'
+import { LLMReplacement, LLMInsertion } from '@/lib/types'
 
-export function parseLLMResponse(rawContent: string): { response: string; replacements: LLMReplacement[] } {
+export function parseLLMResponse(rawContent: string): { response: string; replacements: LLMReplacement[]; insertions: LLMInsertion[] } {
   console.log('Parsing LLM response:', rawContent)
   
   try {
@@ -12,11 +12,182 @@ export function parseLLMResponse(rawContent: string): { response: string; replac
       console.log('Successfully parsed JSON response')
       return {
         response: parsed.response,
-        replacements: Array.isArray(parsed.replacements) ? parsed.replacements : []
+        replacements: Array.isArray(parsed.replacements) ? parsed.replacements.map((r: LLMReplacement) => ({
+          ...r,
+          type: r.type || 'replacement'
+        })) : [],
+        insertions: Array.isArray(parsed.insertions) ? parsed.insertions : []
       }
     }
   } catch (error) {
-    console.log('Failed to parse as JSON, trying fallback parsing:', error)
+    console.log('Failed to parse as JSON:', error)
+  }
+  
+  // Try to extract partial JSON content for streaming
+  // Look for patterns like {"response": "partial text... and partial replacements/insertions
+  const responseMatch = rawContent.match(/"response"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)/)
+  const partialResponse = responseMatch ? responseMatch[1] : undefined
+
+  // Try to extract partial replacements array - be more aggressive about detecting partial blocks
+  const partialReplacements: LLMReplacement[] = []
+  
+  // First, check if we have a replacements array at all
+  if (rawContent.includes('"replacements"')) {
+    // Look for individual replacement objects, even if they're incomplete
+    const replacementObjects = rawContent.match(/\{[^}]*"id"[^}]*\}/g) || []
+    
+    replacementObjects.forEach((objStr) => {
+      try {
+        // Try to parse as complete JSON first
+        const parsed = JSON.parse(objStr) as LLMReplacement
+        if (parsed.id) {
+          partialReplacements.push(parsed)
+        }
+      } catch {
+        // If parsing fails, extract what we can manually
+        const idMatch = objStr.match(/"id"\s*:\s*"([^"]*)"/)
+        const textMatch = objStr.match(/"text"\s*:\s*"([^"]*)/)
+        const descriptionMatch = objStr.match(/"description"\s*:\s*"([^"]*)/)
+        const typeMatch = objStr.match(/"type"\s*:\s*"([^"]*)/)
+        
+        if (idMatch) {
+          partialReplacements.push({
+            id: idMatch[1],
+            text: textMatch ? textMatch[1] : '',
+            description: descriptionMatch ? descriptionMatch[1] : '',
+            type: (typeMatch ? typeMatch[1] : 'replacement') as 'replacement',
+          })
+        }
+      }
+    })
+    
+    // If we found no complete objects but we see the start of replacements, create a placeholder
+    if (partialReplacements.length === 0 && rawContent.includes('"replacements"')) {
+      const replacementsStart = rawContent.indexOf('"replacements"')
+      const afterReplacements = rawContent.substring(replacementsStart)
+      
+      // Look for any partial object that might be starting
+      if (afterReplacements.includes('{') && afterReplacements.includes('"id"')) {
+        // Create a placeholder replacement
+        partialReplacements.push({
+          id: `placeholder-${Date.now()}`,
+          text: '',
+          description: '',
+          type: 'replacement',
+        })
+      }
+    }
+  }
+
+  // Try to extract partial insertions array - be more aggressive about detecting partial blocks
+  const partialInsertions: LLMInsertion[] = []
+  
+  // First, check if we have an insertions array at all
+  if (rawContent.includes('"insertions"')) {
+    // Look for individual insertion objects, even if they're incomplete
+    const insertionObjects = rawContent.match(/\{[^}]*"id"[^}]*\}/g) || []
+    
+    insertionObjects.forEach((objStr) => {
+      try {
+        // Try to parse as complete JSON first
+        const parsed = JSON.parse(objStr) as LLMInsertion
+        if (parsed.id) {
+          partialInsertions.push(parsed)
+        }
+      } catch {
+        // If parsing fails, extract what we can manually
+        const idMatch = objStr.match(/"id"\s*:\s*"([^"]*)"/)
+        const textMatch = objStr.match(/"text"\s*:\s*"([^"]*)/)
+        const descriptionMatch = objStr.match(/"description"\s*:\s*"([^"]*)/)
+        
+        if (idMatch) {
+          partialInsertions.push({
+            id: idMatch[1],
+            text: textMatch ? textMatch[1] : '',
+            description: descriptionMatch ? descriptionMatch[1] : '',
+          })
+        }
+      }
+    })
+    
+    // If we found no complete objects but we see the start of insertions, create a placeholder
+    if (partialInsertions.length === 0 && rawContent.includes('"insertions"')) {
+      const insertionsStart = rawContent.indexOf('"insertions"')
+      const afterInsertions = rawContent.substring(insertionsStart)
+      
+      // Look for any partial object that might be starting
+      if (afterInsertions.includes('{') && afterInsertions.includes('"id"')) {
+        // Create a placeholder insertion
+        partialInsertions.push({
+          id: `placeholder-${Date.now()}`,
+          text: '',
+          description: '',
+        })
+      }
+    }
+  }
+
+  if (partialResponse || partialReplacements.length > 0 || partialInsertions.length > 0) {
+    console.log('Extracted partial content:', {
+      response: partialResponse,
+      replacements: partialReplacements.length,
+      insertions: partialInsertions.length
+    })
+    return {
+      response: partialResponse || '',
+      replacements: partialReplacements,
+      insertions: partialInsertions
+    }
+  }
+  
+  // Also try to extract from incomplete JSON that might be missing closing braces
+  const incompleteMatch = rawContent.match(/"response"\s*:\s*"([^"]*(?:\\"[^"]*)*)"\s*,?\s*$/)
+  if (incompleteMatch) {
+    const partialResponse = incompleteMatch[1]
+    if (partialResponse) {
+      console.log('Extracted partial response from incomplete JSON:', partialResponse)
+      
+      // Also try to extract replacements and insertions from the incomplete JSON
+      let partialReplacements: LLMReplacement[] = []
+      let partialInsertions: LLMInsertion[] = []
+      
+      // Try to extract replacements array
+      const replacementsMatch = rawContent.match(/"replacements"\s*:\s*\[([^\]]*)\]/)
+      if (replacementsMatch) {
+        try {
+          const replacementsStr = `[${replacementsMatch[1]}]`
+          const parsedReplacements = JSON.parse(replacementsStr) as LLMReplacement[]
+          if (Array.isArray(parsedReplacements)) {
+            partialReplacements = parsedReplacements.map((r: LLMReplacement) => ({
+              ...r,
+              type: r.type || 'replacement'
+            }))
+          }
+        } catch (e) {
+          console.log('Failed to parse partial replacements from incomplete JSON:', e)
+        }
+      }
+      
+      // Try to extract insertions array
+      const insertionsMatch = rawContent.match(/"insertions"\s*:\s*\[([^\]]*)\]/)
+      if (insertionsMatch) {
+        try {
+          const insertionsStr = `[${insertionsMatch[1]}]`
+          const parsedInsertions = JSON.parse(insertionsStr) as LLMInsertion[]
+          if (Array.isArray(parsedInsertions)) {
+            partialInsertions = parsedInsertions
+          }
+        } catch (e) {
+          console.log('Failed to parse partial insertions from incomplete JSON:', e)
+        }
+      }
+      
+      return {
+        response: partialResponse,
+        replacements: partialReplacements,
+        insertions: partialInsertions
+      }
+    }
   }
   
   // Fallback: try to extract JSON from markdown code blocks
@@ -28,7 +199,11 @@ export function parseLLMResponse(rawContent: string): { response: string; replac
         console.log('Successfully parsed JSON from markdown block')
         return {
           response: parsed.response,
-          replacements: Array.isArray(parsed.replacements) ? parsed.replacements : []
+          replacements: Array.isArray(parsed.replacements) ? parsed.replacements.map((r: LLMReplacement) => ({
+            ...r,
+            type: r.type || 'replacement'
+          })) : [],
+          insertions: Array.isArray(parsed.insertions) ? parsed.insertions : []
         }
       }
     } catch (error) {
@@ -36,88 +211,25 @@ export function parseLLMResponse(rawContent: string): { response: string; replac
     }
   }
   
-  // Final fallback: treat as plain text with legacy replacement parsing
-  console.log('Using fallback parsing for legacy format')
-  const fallback = parseLegacyResponse(rawContent)
-  return {
-    response: fallback.content,
-    replacements: fallback.replacements.map(r => ({
-      id: r.id,
-      text: r.text,
-      description: 'Text replacement suggestion'
-    }))
-  }
-}
-
-function parseLegacyResponse(content: string): FallbackResponse {
-  const replacements: Array<{ id: string; text: string; startIndex: number }> = []
+  // If no valid JSON found, determine if this was intended to be JSON or simple text
+  // Check if the content looks like it was intended to be JSON (starts with { or [)
+  const looksLikeJson = rawContent.trim().startsWith('{') || rawContent.trim().startsWith('[')
   
-  // Legacy patterns for backward compatibility
-  const patterns = [
-    /```replacement\n([\s\S]*?)\n```/g,
-    /-replacement\n`([\s\S]*?)`\n/g,
-    /```replacement\s*\n([\s\S]*?)```/g,
-    /-replacement\n`([\s\S]*?)`\n•/g
-  ]
-  
-  let match
-  let displayText = content
-  
-  for (const pattern of patterns) {
-    while ((match = pattern.exec(content)) !== null) {
-      const replacementText = match[1].trim()
-        .replace(/^["']|["']$/g, '')
-        .replace(/^`|`$/g, '')
-        .trim()
-      
-      if (replacementText) {
-        const replacementId = `legacy-${match.index}-${replacementText.length}`
-        replacements.push({
-          id: replacementId,
-          text: replacementText,
-          startIndex: match.index
-        })
-      }
+  if (looksLikeJson) {
+    // This looks like malformed JSON - return empty to prevent showing raw JSON
+    console.log('Content looks like malformed JSON, returning empty response')
+    return {
+      response: "",
+      replacements: [],
+      insertions: []
     }
-  }
-  
-  // Remove replacement blocks from display text
-  if (replacements.length > 0) {
-    const blocksToRemove: Array<{ start: number; end: number }> = []
-    
-    for (const replacement of replacements) {
-      const patterns = [
-        /```replacement\n[\s\S]*?\n```/g,
-        /-replacement\n`[\s\S]*?`\n/g,
-        /```replacement\s*\n[\s\S]*?```/g,
-        /-replacement\n`[\s\S]*?`\n•/g
-      ]
-      
-      for (const pattern of patterns) {
-        pattern.lastIndex = 0
-        const match = pattern.exec(content)
-        if (match && match.index === replacement.startIndex) {
-          blocksToRemove.push({
-            start: match.index,
-            end: match.index + match[0].length
-          })
-          break
-        }
-      }
+  } else {
+    // This looks like simple text - return the raw content
+    console.log('Content appears to be simple text, returning raw content')
+    return {
+      response: rawContent,
+      replacements: [],
+      insertions: []
     }
-    
-    blocksToRemove.sort((a, b) => b.start - a.start)
-    
-    let cleanContent = content
-    for (const block of blocksToRemove) {
-      cleanContent = cleanContent.substring(0, block.start) + cleanContent.substring(block.end)
-    }
-    
-    displayText = cleanContent.replace(/\n\s*\n\s*\n/g, '\n\n').trim()
-  }
-  
-  return {
-    content: displayText,
-    replacements
   }
 } 
