@@ -156,15 +156,15 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
       <div className="flex-1 flex flex-col">
         {/* Header with controls */}
         <div className="flex items-center justify-between p-4 border-b">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
             <h2 className="text-lg font-semibold">Editor</h2>
-            <div className="text-sm text-muted-foreground">
+            <div className="hidden md:block text-sm text-muted-foreground">
               {wordCount} words • {charCount} characters
             </div>
             {isSaving && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                <span>Saving...</span>
+                <span className="hidden sm:inline">Saving...</span>
               </div>
             )}
             {currentSelection && (
@@ -173,7 +173,7 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
             <ThemeToggle />
             <button
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}

@@ -87,9 +87,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Handle API key errors
-    if (error instanceof Error && error.message.includes("401")) {
+    if (error instanceof Error && (error.message.includes("Invalid API key") || error.message.includes("401"))) {
       return new Response(
-        JSON.stringify({ error: "Invalid API key" }), 
+        JSON.stringify({ error: error.message }), 
         { 
           status: 401,
           headers: { "Content-Type": "application/json" }

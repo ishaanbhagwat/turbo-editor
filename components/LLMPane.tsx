@@ -36,6 +36,7 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
     const [isSaving, setIsSaving] = useState(false)
     const [showSelectedTextContext, setShowSelectedTextContext] = useState(false)
     const [currentModel, setCurrentModel] = useState("gpt-3.5-turbo") // Default fallback
+    const [isApiKeyInvalid, setIsApiKeyInvalid] = useState(false)
 
     const scrollRef = useRef<HTMLDivElement>(null)
     const saveTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
@@ -327,7 +328,15 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
           }
         } catch (err) {
           console.error("LLM error:", err)
-          setError(err instanceof Error ? err.message : "Failed to get response from AI")
+          const errorMessage = err instanceof Error ? err.message : "Failed to get response from AI"
+          setError(errorMessage)
+          
+          // Check if this is an API key error
+          if (errorMessage.includes("Invalid API key") || errorMessage.includes("401")) {
+            setIsApiKeyInvalid(true)
+            setHasKey(false) // Mark as no valid key
+          }
+          
           // Update the assistant message to show error
           setMessages(prev => {
             const errorMessages = prev.map((msg) =>
@@ -358,11 +367,12 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
       const handleKeySaved = () => {
         setHasKey(true)
         setError(null)
+        setIsApiKeyInvalid(false)
       }
 
       if (isCheckingKey) {
         return (
-          <div className="w-[30%] border-r flex flex-col bg-background">
+          <div className="w-full md:w-[30%] md:border-r flex flex-col bg-background">
             <div className="flex-1 flex items-center justify-center">
               <div className="text-sm text-muted-foreground">Checking API key...</div>
             </div>
@@ -372,7 +382,7 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
 
       if (!hasKey) {
         return (
-          <div className="w-[30%] border-r flex flex-col bg-background">
+          <div className="w-full md:w-[30%] md:border-r flex flex-col bg-background">
             <div className="flex-1 p-4">
               <div className="space-y-4">
                 <div>
@@ -393,10 +403,42 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
         )
       }
 
+      if (isApiKeyInvalid) {
+        return (
+          <div className="w-full md:w-[30%] md:border-r flex flex-col bg-background">
+            <div className="flex-1 p-4">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold mb-2 text-red-600">API Key Invalid</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Your OpenAI API key has become invalid or expired. Please enter a new valid API key to continue.
+                  </p>
+                  <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">
+                    <div className="font-medium mb-1">⚠️ API Key Error</div>
+                    <div>Your previous API key is no longer valid. This could be due to:</div>
+                    <ul className="list-disc list-inside mt-2 space-y-1">
+                      <li>Key expiration or revocation</li>
+                      <li>Incorrect key format</li>
+                      <li>Account suspension or billing issues</li>
+                    </ul>
+                  </div>
+                </div>
+                <KeyInput onKeySaved={handleKeySaved} />
+                {error && (
+                  <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950 p-2 rounded">
+                    {error}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      }
+
     return(
-        <div className="w-[30%] border-r flex flex-col bg-background">
+        <div className="w-full md:w-[30%] md:border-r flex flex-col bg-background h-full">
         {/* Header with clear key button and theme toggle */}
-        <div className="p-4 border-b flex justify-between items-center">
+        <div className="flex-shrink-0 p-4 border-b flex justify-between items-center">
           <div className="flex items-center gap-2">
             <h1 className="font-semibold text-xl">Turbo Assistant</h1>
             {isSaving && (
@@ -426,8 +468,8 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
           </div>
         </div>
 
-        {/* Chat area - separately scrollable */}
-        <div className="flex-1 overflow-y-auto p-4">
+        {/* Chat area - takes remaining space but doesn't overflow */}
+        <div className="flex-1 overflow-y-auto p-4 min-h-0">
             {messages.length === 0 && (
               <div className="text-center py-8">
                 <div className="text-sm text-muted-foreground mb-2">
@@ -481,8 +523,8 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
             <div ref={scrollRef} />
         </div>
 
-        {/* Input - fixed at bottom */}
-        <div className="border-t p-4">
+        {/* Input - fixed at bottom, always visible */}
+        <div className="flex-shrink-0 border-t p-4 bg-background">
             <div className="relative">
                 {showSelectedTextContext && selectedText && selectedText.trim() && (
                   <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded text-xs text-blue-700 dark:text-blue-300">
