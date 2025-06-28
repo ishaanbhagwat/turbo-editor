@@ -84,19 +84,85 @@ npm run dev
 ## 📁 Project Structure
 
 ```
-├── app/
-│   ├── api/              # API routes (chat, key management)
-│   ├── components/       # App-specific components
-│   └── page.tsx          # Main page
-├── components/
-│   ├── ui/              # Reusable UI components
-│   ├── EditorPane.tsx   # Main text editor
-│   ├── LLMPane.tsx      # AI chat interface
-│   ├── ExportButton.tsx # Document export functionality
-│   ├── ThemeToggle.tsx  # Dark mode toggle
-│   └── ChatMessage.tsx  # Individual chat messages
-└── lib/
-    └── llm/             # LLM provider implementations
+ai-text-editor/
+├── app/                          # Next.js App Router
+│   ├── __tests__/               # App-level tests
+│   │   └── page.test.tsx        # Main page tests
+│   ├── api/                     # API routes
+│   │   ├── __tests__/           # API tests
+│   │   ├── chat/                # AI chat endpoint
+│   │   │   └── route.ts         # Streaming chat API
+│   │   ├── clear-key/           # Key removal endpoint
+│   │   │   └── route.ts         # Clear API key
+│   │   ├── debug/               # Debug endpoints
+│   │   │   └── clear-cookies/   # Cookie clearing
+│   │   │       └── route.ts
+│   │   ├── key-check/           # Key validation endpoint
+│   │   │   └── route.ts         # Check API key status
+│   │   └── set-key/             # Key storage endpoint
+│   │       └── route.ts         # Store API key securely
+│   ├── favicon.ico              # App icon
+│   ├── globals.css              # Global styles
+│   ├── layout.tsx               # Root layout
+│   └── page.tsx                 # Main page component
+├── components/                   # React components
+│   ├── __tests__/               # Component tests
+│   │   ├── ThemeToggle.test.tsx # Theme toggle tests
+│   │   └── ...                  # Other component tests
+│   ├── ui/                      # Reusable UI components
+│   │   ├── __tests__/           # UI component tests
+│   │   │   ├── button.simple.test.tsx
+│   │   │   └── button.test.tsx
+│   │   ├── button.tsx           # Button component
+│   │   ├── input.tsx            # Input component
+│   │   ├── label.tsx            # Label component
+│   │   ├── scroll-area.tsx      # Scroll area component
+│   │   ├── switch.tsx           # Switch component
+│   │   └── textarea.tsx         # Textarea component
+│   ├── ChatEditorLayout.tsx     # Main layout component
+│   ├── ChatMessage.tsx          # Individual chat messages
+│   ├── EditorPane.tsx           # Main text editor
+│   ├── ExportButton.tsx         # Document export functionality
+│   ├── KeyInput.tsx             # API key input component
+│   ├── LLMPane.tsx              # AI chat interface
+│   ├── SettingsPane.tsx         # Settings panel
+│   ├── ThemeProvider.tsx        # Theme context provider
+│   └── ThemeToggle.tsx          # Dark mode toggle
+├── lib/                         # Utility libraries
+│   ├── __tests__/               # Library tests
+│   │   ├── utils.simple.test.ts # Simple utility tests
+│   │   └── utils.test.ts        # Main utility tests
+│   ├── llm/                     # LLM integration
+│   │   ├── parser.ts            # Response parsing logic
+│   │   ├── providers/           # LLM provider implementations
+│   │   │   ├── base.ts          # Base provider interface
+│   │   │   └── openai.ts        # OpenAI provider
+│   │   └── registry.ts          # Provider registry
+│   ├── llmClient.ts             # LLM client wrapper
+│   ├── prompts/                 # AI prompt templates
+│   │   ├── index.ts             # Prompt exports
+│   │   └── system.ts            # System prompt definitions
+│   ├── settings.ts              # Settings management
+│   ├── test-utils.tsx           # Test utilities
+│   ├── types.ts                 # TypeScript type definitions
+│   └── utils.ts                 # Utility functions
+├── public/                      # Static assets
+│   ├── file.svg                 # File icon
+│   ├── globe.svg                # Globe icon
+│   ├── next.svg                 # Next.js logo
+│   ├── vercel.svg               # Vercel logo
+│   └── window.svg               # Window icon
+├── components.json              # UI component configuration
+├── eslint.config.mjs            # ESLint configuration
+├── jest.config.js               # Jest test configuration
+├── jest.setup.js                # Jest setup file
+├── next.config.ts               # Next.js configuration
+├── package-lock.json            # Dependency lock file
+├── package.json                 # Project dependencies
+├── postcss.config.mjs           # PostCSS configuration
+├── README.md                    # Project documentation
+├── tsconfig.json                # TypeScript configuration
+└── turbo1.svg                   # Turbo logo
 ```
 
 ## 🔧 API Endpoints
@@ -117,14 +183,6 @@ npm run dev
 - Modify CSS variables in `app/globals.css`
 - Add new theme variants in the ThemeProvider
 - Customize component styling with Tailwind classes
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ## 📄 License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

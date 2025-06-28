@@ -523,7 +523,7 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
         {/* Header with clear key button and theme toggle */}
         <div className="flex-shrink-0 p-4 border-b flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <h1 className="font-semibold text-xl">Turbo Assistant</h1>
+            <h1 className="font-semibold text-xl">Turbo Editor</h1>
             {isSaving && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
