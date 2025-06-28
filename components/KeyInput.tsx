@@ -24,11 +24,11 @@ export function KeyInput({ onKeySaved }: KeyInputProps) {
       setIsLoading(true)
       setError(null)
       
-      const res = await fetch("/api/set-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: key })
-      })
+    const res = await fetch("/api/set-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey: key })
+    })
 
       if (!res.ok) {
         throw new Error(`Failed to save key: ${res.status} ${res.statusText}`)

@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { ExportButton } from "@/components/ExportButton"
 import { SettingsPane } from "@/components/SettingsPane"
@@ -18,6 +17,7 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [currentSelection, setCurrentSelection] = useState<{ start: number; end: number; text: string } | null>(null)
+  const [isSelectionPersistent, setIsSelectionPersistent] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
 
@@ -90,10 +90,33 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
           text: selection
         }
         setCurrentSelection(selectionRange)
+        setIsSelectionPersistent(false) // Reset persistent state when new selection is made
         onTextSelect(selection)
       } else {
         setCurrentSelection(null)
+        setIsSelectionPersistent(false)
         onTextSelect("")
+      }
+    }
+  }
+
+  const handleTextareaFocus = () => {
+    // Restore selection if we have a persistent selection
+    if (isSelectionPersistent && currentSelection && textareaRef.current) {
+      textareaRef.current.setSelectionRange(currentSelection.start, currentSelection.end)
+      setIsSelectionPersistent(false)
+    }
+  }
+
+  const handleTextareaBlur = () => {
+    // Make selection persistent if we have a current selection
+    if (currentSelection && textareaRef.current) {
+      const currentStart = textareaRef.current.selectionStart
+      const currentEnd = textareaRef.current.selectionEnd
+      
+      // Only make persistent if there's actually a selection
+      if (currentStart !== currentEnd) {
+        setIsSelectionPersistent(true)
       }
     }
   }
@@ -111,6 +134,7 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
     
     // Clear the selection after replacement
     setCurrentSelection(null)
+    setIsSelectionPersistent(false)
     
     // Focus back to textarea and set cursor position after the replaced text
     setTimeout(() => {
@@ -135,6 +159,23 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
       delete (window as any).replaceSelectedText
     }
   }, [currentSelection, content, onTextSelect, replaceSelectedText])
+
+  // Update selection styling based on persistent state
+  useEffect(() => {
+    if (textareaRef.current) {
+      const textarea = textareaRef.current
+      
+      if (isSelectionPersistent) {
+        // Gray selection for persistent state
+        textarea.style.setProperty('--selection-bg', 'rgb(229 231 235)') // gray-200
+        textarea.style.setProperty('--selection-color', 'rgb(55 65 81)') // gray-700
+      } else {
+        // Blue selection for active state
+        textarea.style.setProperty('--selection-bg', 'rgb(59 130 246)') // blue-500
+        textarea.style.setProperty('--selection-color', 'rgb(255 255 255)') // white
+      }
+    }
+  }, [isSelectionPersistent])
 
   // Clear saved content (for settings or manual clear)
   const clearSavedContent = () => {
@@ -207,8 +248,10 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
             onSelect={handleTextareaSelect}
             onMouseUp={handleTextareaSelect}
             onKeyUp={handleTextareaSelect}
+            onFocus={handleTextareaFocus}
+            onBlur={handleTextareaBlur}
             placeholder="Start writing your masterpiece..."
-            className="w-full h-full p-4 resize-none border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 overflow-y-auto"
+            className="editor-textarea w-full h-full p-4 resize-none border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 overflow-y-auto"
           />
         </div>
       </div>

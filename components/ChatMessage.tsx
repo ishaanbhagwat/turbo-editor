@@ -105,8 +105,8 @@ export function ChatMessage({ role, content, timestamp, replacements, usedReplac
     }
 
     console.log('Processing replacements for assistant message')
-    
-    return (
+
+  return (
       <div className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
         {/* Render the main text content - this should be clean without replacement blocks */}
         <div>{renderFormattedText(content)}</div>

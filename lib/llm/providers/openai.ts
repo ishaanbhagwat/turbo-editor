@@ -5,20 +5,20 @@ export const OpenAIProvider: LLMProvider = {
 
   async stream(messages: LLMMessage[], apiKey: string, model: string = "gpt-3.5-turbo") {
     try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
           model,
-          messages,
+        messages,
           stream: true,
           temperature: 0.7,
           max_tokens: 1000
-        })
       })
+    })
 
       if (!res.ok) {
         const errorText = await res.text()
@@ -52,9 +52,9 @@ export const OpenAIProvider: LLMProvider = {
 
       if (!res.body) {
         throw new Error("No response body from OpenAI API")
-      }
+    }
 
-      return res.body
+    return res.body
     } catch (error) {
       // Re-throw the error with more context
       if (error instanceof Error) {
