@@ -1,98 +1,164 @@
-# AI Text Editor with BYOK (Bring Your Own Key)
+# Turbo Editor - AI-Powered Writing Assistant
 
-A modern text editor with integrated AI chat functionality using a Bring Your Own Key (BYOK) system for secure API key management.
+A modern, feature-rich text editor with integrated AI assistance, built with Next.js 15, TypeScript, and Tailwind CSS. Turbo Editor combines the power of AI with a clean, intuitive writing experience.
 
-## Features
+## ✨ Features
 
-- **Secure BYOK System**: Your API keys are stored securely in HTTP-only cookies
-- **Real-time AI Chat**: Stream responses from OpenAI's GPT models
-- **Modern UI**: Built with Next.js 15, TypeScript, and Tailwind CSS
-- **Error Handling**: Graceful error handling with user-friendly messages
-- **Responsive Design**: Works on desktop and mobile devices
+### 🤖 **AI-Powered Writing Assistant**
+- **Turbo Assistant**: Specialized AI for writing, editing, and brainstorming
+- **Context-Aware**: Select text from editor to get specific feedback
+- **Conversation Memory**: AI remembers your conversation history
+- **Real-time Streaming**: Watch AI responses generate in real-time
+- **BYOK System**: Secure API key management with HTTP-only cookies
 
-## Getting Started
+### 🎨 **Modern UI/UX**
+- **Dark Mode Support**: Toggle between light, dark, and system themes
+- **Responsive Design**: Works seamlessly on desktop and mobile
+- **Clean Interface**: Minimal, distraction-free writing environment
+- **Smooth Animations**: Polished interactions and transitions
+- **Cursor-like Prompt Area**: Professional input experience with floating send button
+
+### 📝 **Writing Tools**
+- **Real-time Word/Character Count**: Track your writing progress
+- **Text Selection Context**: Select text to get AI feedback on specific content
+- **Export Functionality**: Export your work as PDF or Word documents
+- **Monospace Font**: Perfect for code, technical writing, and structured content
+
+### 🔒 **Security & Privacy**
+- **Bring Your Own Key (BYOK)**: Your API keys stay on your device
+- **HTTP-only Cookies**: Secure storage with no server-side key storage
+- **No Data Collection**: Your content never leaves your device
+- **Local Processing**: All text processing happens client-side
+
+## 🚀 Getting Started
 
 ### Prerequisites
-
 - Node.js 18+ 
 - An OpenAI API key
 
 ### Installation
 
-1. Clone the repository:
+1. **Clone the repository**:
 ```bash
 git clone <repository-url>
 cd ai-text-editor
 ```
 
-2. Install dependencies:
+2. **Install dependencies**:
 ```bash
 npm install
 ```
 
-3. Run the development server:
+3. **Start the development server**:
 ```bash
 npm run dev
 ```
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser
+4. **Open your browser** and navigate to `http://localhost:3000`
 
-### Setting Up Your API Key
+### First Time Setup
 
-1. Get an OpenAI API key from [OpenAI Platform](https://platform.openai.com/api-keys)
-2. Click on the chat panel in the application
-3. Enter your API key in the setup form
-4. Click "Save" to securely store your key
-5. Start chatting with the AI assistant!
+1. **Get an OpenAI API key** from [OpenAI Platform](https://platform.openai.com/api-keys)
+2. **Enter your API key** in the setup form when prompted
+3. **Start writing** and chatting with Turbo Assistant!
 
-### Security Features
+## 🎯 How to Use
 
-- **HTTP-only Cookies**: API keys are stored in secure, HTTP-only cookies
-- **No Server Storage**: Your keys are never stored on the server
-- **Automatic Cleanup**: Keys can be cleared at any time
-- **CORS Protection**: Built-in protection against cross-origin attacks
+### Basic Writing
+- **Type in the editor** on the right side
+- **Real-time feedback** from word and character counters
+- **Export your work** using the Export button next to "Editor"
 
-## API Endpoints
+### AI Assistance
+- **Ask questions** in the chat panel on the left
+- **Select text** in the editor to get specific feedback
+- **Press Enter** to send messages (no send button needed)
+- **Use conversation history** - AI remembers previous context
 
-- `POST /api/set-key` - Store API key in secure cookie
-- `GET /api/key-check` - Check if API key exists
-- `POST /api/clear-key` - Clear stored API key
-- `POST /api/chat` - Stream chat responses from LLM
+### Advanced Features
+- **Text Selection**: Select any text in the editor to include it as context
+- **Theme Switching**: Toggle between light, dark, and system themes
+- **Export Options**: Save your work as PDF or Word documents
+- **New Conversations**: Start fresh with the "New Chat" button
 
-## Error Handling
+## 🛠️ Technical Stack
 
-The application includes comprehensive error handling for:
+- **Framework**: Next.js 15 with App Router
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS with custom design system
+- **AI Integration**: OpenAI GPT-3.5 Turbo with streaming
+- **Export**: jsPDF for PDF, docx for Word documents
+- **Icons**: Lucide React
+- **State Management**: React hooks with local storage
 
-- Invalid API keys
-- Network connectivity issues
-- Rate limiting
-- Service unavailability
-- Malformed requests
-
-## Development
-
-### Project Structure
+## 📁 Project Structure
 
 ```
 ├── app/
-│   ├── api/           # API routes
-│   ├── components/    # App-specific components
-│   └── page.tsx       # Main page
+│   ├── api/              # API routes (chat, key management)
+│   ├── components/       # App-specific components
+│   └── page.tsx          # Main page
 ├── components/
-│   ├── ui/           # Reusable UI components
-│   ├── LLMPane.tsx   # Chat interface
-│   ├── EditorPane.tsx # Text editor
-│   └── KeyInput.tsx  # API key input
+│   ├── ui/              # Reusable UI components
+│   ├── EditorPane.tsx   # Main text editor
+│   ├── LLMPane.tsx      # AI chat interface
+│   ├── ExportButton.tsx # Document export functionality
+│   ├── ThemeToggle.tsx  # Dark mode toggle
+│   └── ChatMessage.tsx  # Individual chat messages
 └── lib/
-    └── llm/          # LLM provider implementations
+    └── llm/             # LLM provider implementations
 ```
 
-### Adding New LLM Providers
+## 🔧 API Endpoints
 
+- `POST /api/set-key` - Store API key securely
+- `GET /api/key-check` - Check if API key exists
+- `POST /api/clear-key` - Remove stored API key
+- `POST /api/chat` - Stream AI responses
+
+## 🎨 Customization
+
+### Adding New LLM Providers
 1. Create a new provider in `lib/llm/providers/`
 2. Implement the `LLMProvider` interface
 3. Register the provider in `lib/llm/registry.ts`
 
-## License
+### Theme Customization
+- Modify CSS variables in `app/globals.css`
+- Add new theme variants in the ThemeProvider
+- Customize component styling with Tailwind classes
 
-MIT License - see LICENSE file for details
+## 🚀 Deployment
+
+### Vercel (Recommended)
+1. Push your code to GitHub
+2. Connect your repository to Vercel
+3. Deploy with one click
+
+### Other Platforms
+- **Netlify**: Compatible with Next.js static export
+- **Railway**: Full-stack deployment support
+- **Docker**: Containerized deployment available
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **OpenAI** for providing the GPT API
+- **Vercel** for the Next.js framework
+- **Tailwind CSS** for the styling system
+- **Lucide** for the beautiful icons
+
+---
+
+**Turbo Editor** - Turbocharge your writing with AI assistance! 🚀
