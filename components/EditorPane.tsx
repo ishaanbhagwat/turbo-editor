@@ -151,11 +151,11 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
   const charCount = content.length
 
   return (
-    <div className="flex-1 flex flex-col bg-background relative">
+    <div className="flex-1 flex flex-col bg-background relative h-full">
       {/* Main editor area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0">
         {/* Header with controls */}
-        <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex-shrink-0 flex items-center justify-between p-4 border-b">
           <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
             <h2 className="text-lg font-semibold">Editor</h2>
             <div className="hidden md:block text-sm text-muted-foreground">
@@ -199,19 +199,17 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
         </div>
 
         {/* Editor content */}
-        <div className="flex-1 p-4">
-          <ScrollArea className="h-full">
-            <textarea
-              ref={textareaRef}
-              value={content}
-              onChange={handleTextareaChange}
-              onSelect={handleTextareaSelect}
-              onMouseUp={handleTextareaSelect}
-              onKeyUp={handleTextareaSelect}
-              placeholder="Start writing your masterpiece..."
-              className="w-full h-full min-h-[400px] p-4 resize-none border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-            />
-          </ScrollArea>
+        <div className="flex-1 p-4 min-h-0">
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={handleTextareaChange}
+            onSelect={handleTextareaSelect}
+            onMouseUp={handleTextareaSelect}
+            onKeyUp={handleTextareaSelect}
+            placeholder="Start writing your masterpiece..."
+            className="w-full h-full p-4 resize-none border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 overflow-y-auto"
+          />
         </div>
       </div>
 
