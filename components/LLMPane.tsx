@@ -1,7 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from "react";
 import { Textarea } from "@/components/ui/textarea"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { ChatMessage } from "./ChatMessage";
 import { KeyInput } from "@/components/KeyInput"
@@ -300,7 +299,7 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
                   Start a conversation with Turbo Assistant
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  I'll remember our conversation context
+                  I&apos;ll remember our conversation context
                 </div>
               </div>
             )}
@@ -336,7 +335,7 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
                     if (input.trim() && hasKey && !isLoading) {
-                      handleSubmit(e as any)
+                      handleSubmit(e as React.FormEvent)
                     }
                   }
                 }}
@@ -350,7 +349,7 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
                   onClick={(e) => {
                     e.preventDefault()
                     if (input.trim() && hasKey && !isLoading) {
-                      handleSubmit(e as any)
+                      handleSubmit(e as React.FormEvent)
                     }
                   }}
                   disabled={!input.trim() || !hasKey || isLoading}

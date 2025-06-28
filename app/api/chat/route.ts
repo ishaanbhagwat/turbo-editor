@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server"
 import { cookies } from "next/headers"
 import { getProvider } from "@/lib/llm/registry"
-import { LLMMessage } from "@/lib/llm/providers/base"
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,7 +25,7 @@ export async function POST(req: NextRequest) {
     let body
     try {
       body = await req.json()
-    } catch (parseError) {
+    } catch {
       return new Response(
         JSON.stringify({ error: "Invalid JSON in request body" }), 
         { 

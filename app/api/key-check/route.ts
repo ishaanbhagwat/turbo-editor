@@ -1,7 +1,6 @@
 import { cookies } from "next/headers"
-import { NextRequest } from "next/server"
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const cookieStore = await cookies()
   const key = cookieStore.get("llm_api_key")?.value
   if (!key) return new Response(JSON.stringify({ exists: false }), { status: 200 })

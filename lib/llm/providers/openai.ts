@@ -29,7 +29,7 @@ export const OpenAIProvider: LLMProvider = {
           if (errorData.error?.message) {
             errorMessage = `OpenAI API error: ${errorData.error.message}`
           }
-        } catch (parseError) {
+        } catch {
           // If we can't parse the error, use the raw text
           if (errorText) {
             errorMessage = `OpenAI API error: ${errorText}`
