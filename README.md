@@ -2,21 +2,13 @@
 
 A modern, feature-rich text editor with integrated AI assistance, built with Next.js 15, TypeScript, and Tailwind CSS. Turbo Editor combines the power of AI with a clean, intuitive writing experience.
 
-## ✨ Features
+## Features
 
 ### 🤖 **AI-Powered Writing Assistant**
-- **Turbo Assistant**: Specialized AI for writing, editing, and brainstorming
 - **Context-Aware**: Select text from editor to get specific feedback
 - **Conversation Memory**: AI remembers your conversation history
 - **Real-time Streaming**: Watch AI responses generate in real-time
 - **BYOK System**: Secure API key management with HTTP-only cookies
-
-### 🎨 **Modern UI/UX**
-- **Dark Mode Support**: Toggle between light, dark, and system themes
-- **Responsive Design**: Works seamlessly on desktop and mobile
-- **Clean Interface**: Minimal, distraction-free writing environment
-- **Smooth Animations**: Polished interactions and transitions
-- **Cursor-like Prompt Area**: Professional input experience with floating send button
 
 ### 📝 **Writing Tools**
 - **Real-time Word/Character Count**: Track your writing progress
@@ -62,7 +54,7 @@ npm run dev
 2. **Enter your API key** in the setup form when prompted
 3. **Start writing** and chatting with Turbo Assistant!
 
-## 🎯 How to Use
+## How to Use
 
 ### Basic Writing
 - **Type in the editor** on the right side
@@ -84,11 +76,9 @@ npm run dev
 ## 🛠️ Technical Stack
 
 - **Framework**: Next.js 15 with App Router
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS with custom design system
+- **Scripting**: TypeScript + TailwindCSS
 - **AI Integration**: OpenAI GPT-3.5 Turbo with streaming
 - **Export**: jsPDF for PDF, docx for Word documents
-- **Icons**: Lucide React
 - **State Management**: React hooks with local storage
 
 ## 📁 Project Structure
@@ -116,7 +106,7 @@ npm run dev
 - `POST /api/clear-key` - Remove stored API key
 - `POST /api/chat` - Stream AI responses
 
-## 🎨 Customization
+## Customization
 
 ### Adding New LLM Providers
 1. Create a new provider in `lib/llm/providers/`
@@ -128,18 +118,6 @@ npm run dev
 - Add new theme variants in the ThemeProvider
 - Customize component styling with Tailwind classes
 
-## 🚀 Deployment
-
-### Vercel (Recommended)
-1. Push your code to GitHub
-2. Connect your repository to Vercel
-3. Deploy with one click
-
-### Other Platforms
-- **Netlify**: Compatible with Next.js static export
-- **Railway**: Full-stack deployment support
-- **Docker**: Containerized deployment available
-
 ## 🤝 Contributing
 
 1. Fork the repository
@@ -149,16 +127,6 @@ npm run dev
 5. Open a Pull Request
 
 ## 📄 License
-
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **OpenAI** for providing the GPT API
-- **Vercel** for the Next.js framework
-- **Tailwind CSS** for the styling system
-- **Lucide** for the beautiful icons
-
----
 
 **Turbo Editor** - Turbocharge your writing with AI assistance! 🚀
