@@ -5,5 +5,5 @@ export type LLMMessage = {
 
 export interface LLMProvider {
   name: string
-  stream(messages: LLMMessage[], apiKey: string): Promise<ReadableStream<Uint8Array>>
+  stream(messages: LLMMessage[], apiKey: string, model?: string): Promise<ReadableStream<Uint8Array>>
 }

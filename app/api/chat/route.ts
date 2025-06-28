@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const { provider = "openai", messages } = body
+    const { provider = "openai", messages, model } = body
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(
@@ -61,9 +61,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    console.log("Chat route - Calling LLM provider with key length:", apiKey.length)
+    console.log("Chat route - Calling LLM provider with key length:", apiKey.length, "model:", model)
     const llm = getProvider(provider)
-    const stream = await llm.stream(messages, apiKey)
+    const stream = await llm.stream(messages, apiKey, model)
 
     return new Response(stream, {
       headers: {

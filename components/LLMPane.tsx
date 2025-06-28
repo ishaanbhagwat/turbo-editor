@@ -4,17 +4,26 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { ChatMessage } from "./ChatMessage";
 import { KeyInput } from "@/components/KeyInput"
+import { DEFAULT_SYSTEM_PROMPT } from "@/lib/prompts/system"
+import { getSettings, getModelDisplayName } from "@/lib/settings"
+import { parseLLMResponse } from "@/lib/llm/parser"
+import { LLMReplacement } from "@/lib/types"
 
 interface Message {
     id: string
     role: "user" | "assistant" | "system"
     content: string
     timestamp: Date
+    replacements?: LLMReplacement[]
+    usedReplacements?: Set<string> // Track which replacements have been used
   }
 
 interface LLMPaneProps {
   selectedText?: string
 }
+
+const CHAT_HISTORY_KEY = "turbo-chat-history"
+const CHAT_AUTOSAVE_DELAY = 500 // 500ms delay for chat
 
 export default function LLMPane({ selectedText }: LLMPaneProps){
     const [messages, setMessages] = useState<Message[]>([])
@@ -24,25 +33,111 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
     const [isCheckingKey, setIsCheckingKey] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [isClearingKey, setIsClearingKey] = useState(false)
+    const [isSaving, setIsSaving] = useState(false)
+    const [showSelectedTextContext, setShowSelectedTextContext] = useState(false)
+    const [currentModel, setCurrentModel] = useState("gpt-3.5-turbo") // Default fallback
 
     const scrollRef = useRef<HTMLDivElement>(null)
+    const saveTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
 
     // System message for context
     const systemMessage = {
       role: "system" as const,
-      content: `You are Turbo Assistant, a helpful AI writing assistant. You help users with:
-- Writing and editing text
-- Brainstorming ideas
-- Improving writing quality and clarity
-- Answering questions about writing
-- Providing constructive feedback
-
-Be concise, helpful, and encouraging. You have access to the conversation history to maintain context.`
+      content: DEFAULT_SYSTEM_PROMPT
     }
+
+    // Load chat history from localStorage on mount
+    useEffect(() => {
+      try {
+        const savedHistory = localStorage.getItem(CHAT_HISTORY_KEY)
+        if (savedHistory) {
+          const parsedMessages = JSON.parse(savedHistory)
+          // Convert timestamp strings back to Date objects and filter out system messages
+          const messagesWithDates = parsedMessages
+            .filter((msg: { role: string }) => msg.role !== "system")
+            .map((msg: { role: string; content: string; timestamp: string; id: string; usedReplacements?: string[] }) => ({
+              ...msg,
+              timestamp: new Date(msg.timestamp),
+              usedReplacements: msg.usedReplacements ? new Set(msg.usedReplacements) : new Set()
+            }))
+          setMessages(messagesWithDates)
+        }
+      } catch (error) {
+        console.warn("Failed to load chat history:", error)
+      }
+    }, [])
+
+    // Autosave function for chat messages
+    const saveChatHistory = (messagesToSave: Message[]) => {
+      try {
+        // Filter out system messages before saving
+        const messagesToSaveFiltered = messagesToSave.filter(msg => msg.role !== "system")
+        // Convert Set objects to arrays for JSON serialization
+        const serializedMessages = messagesToSaveFiltered.map(msg => ({
+          ...msg,
+          usedReplacements: msg.usedReplacements ? Array.from(msg.usedReplacements) : []
+        }))
+        localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(serializedMessages))
+        setIsSaving(false)
+      } catch (error) {
+        console.error("Failed to save chat history:", error)
+        setIsSaving(false)
+      }
+    }
+
+    // Debounced autosave for chat
+    const debouncedSaveChat = (messagesToSave: Message[]) => {
+      setIsSaving(true)
+      
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+
+      saveTimeoutRef.current = setTimeout(() => {
+        saveChatHistory(messagesToSave)
+      }, CHAT_AUTOSAVE_DELAY)
+    }
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+      return () => {
+        if (saveTimeoutRef.current) {
+          clearTimeout(saveTimeoutRef.current)
+        }
+      }
+    }, [])
 
     useEffect(() => {
       checkApiKey()
     }, [])
+
+    // Load settings after component mounts
+    useEffect(() => {
+      const settings = getSettings()
+      setCurrentModel(settings.defaultModel)
+    }, [])
+
+    // Listen for settings changes
+    useEffect(() => {
+      const handleSettingsChange = (event: CustomEvent) => {
+        if (event.detail.key === 'defaultModel') {
+          setCurrentModel(event.detail.value)
+        }
+      }
+
+      window.addEventListener('settingsChanged', handleSettingsChange as EventListener)
+      
+      return () => {
+        window.removeEventListener('settingsChanged', handleSettingsChange as EventListener)
+      }
+    }, [])
+
+    // Show selected text context when selectedText changes
+    useEffect(() => {
+      if (selectedText && selectedText.trim()) {
+        setShowSelectedTextContext(true)
+      }
+    }, [selectedText])
 
     const checkApiKey = async () => {
       try {
@@ -78,6 +173,8 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
 
         setHasKey(false)
         setMessages([])
+        // Clear saved chat history
+        localStorage.removeItem(CHAT_HISTORY_KEY)
       } catch (err) {
         console.error("Error clearing API key:", err)
         setError("Failed to clear API key")
@@ -89,6 +186,8 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
     const handleNewConversation = () => {
       setMessages([])
       setError(null)
+      // Clear saved chat history
+      localStorage.removeItem(CHAT_HISTORY_KEY)
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -99,14 +198,20 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
           id: crypto.randomUUID(),
           role: "user",
           content: input,
-          timestamp: new Date()
+          timestamp: new Date(Date.now()),
+          usedReplacements: new Set()
         }
     
-        setMessages(prev => [...prev, userMessage])
+        const newMessages = [...messages, userMessage]
+        setMessages(newMessages)
         setInput("")
+        setShowSelectedTextContext(false) // Clear the context display after sending
         scrollToBottom()
         setIsLoading(true)
         setError(null)
+
+        // Trigger autosave for the new message
+        debouncedSaveChat(newMessages)
 
         await streamLLMResponse(userMessage.content)
       }
@@ -116,10 +221,14 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
           id: crypto.randomUUID(),
           role: "assistant",
           content: "",
-          timestamp: new Date()
+          timestamp: new Date(Date.now()),
+          usedReplacements: new Set()
         }
     
-        setMessages(prev => [...prev, assistantMessage])
+        setMessages(prev => {
+          const newMessages = [...prev, assistantMessage]
+          return newMessages
+        })
     
         // Build conversation history with system message and recent messages
         const conversationHistory = [
@@ -146,7 +255,8 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
               messages: [
                 ...conversationHistory.slice(0, -1), // Remove the last user message
                 { role: "user" as const, content: finalUserMessage }
-              ]
+              ],
+              model: currentModel
             })
           })
 
@@ -172,19 +282,40 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
               const trimmed = line.trim()
               if (!trimmed.startsWith("data:")) continue
               const data = trimmed.slice(5).trim()
-              if (data === "[DONE]") return
+              if (data === "[DONE]") {
+                // Parse the final response and update with structured data
+                setMessages(prev => {
+                  const finalMessages = prev.map((msg) => {
+                    if (msg.id === assistantMessage.id) {
+                      const { response, replacements } = parseLLMResponse(msg.content)
+                      return { 
+                        ...msg, 
+                        content: response,
+                        replacements: replacements
+                      }
+                    }
+                    return msg
+                  })
+                  debouncedSaveChat(finalMessages)
+                  return finalMessages
+                })
+                return
+              }
 
               try {
                 const json = JSON.parse(data)
                 const delta = json?.choices?.[0]?.delta?.content
                 if (delta) {
-                  setMessages(prev =>
-                    prev.map((msg) =>
+                  setMessages(prev => {
+                    const updatedMessages = prev.map((msg) =>
                       msg.id === assistantMessage.id
                         ? { ...msg, content: msg.content + delta }
                         : msg
                     )
-                  )
+                    // Trigger autosave during streaming
+                    debouncedSaveChat(updatedMessages)
+                    return updatedMessages
+                  })
                   scrollToBottom()
                 }
               } catch (parseError) {
@@ -198,13 +329,16 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
           console.error("LLM error:", err)
           setError(err instanceof Error ? err.message : "Failed to get response from AI")
           // Update the assistant message to show error
-          setMessages(prev =>
-            prev.map((msg) =>
+          setMessages(prev => {
+            const errorMessages = prev.map((msg) =>
               msg.id === assistantMessage.id
                 ? { ...msg, content: "Sorry, I encountered an error. Please try again." }
                 : msg
             )
-          )
+            // Save even error messages
+            debouncedSaveChat(errorMessages)
+            return errorMessages
+          })
         } finally {
           setIsLoading(false)
         }
@@ -265,11 +399,12 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
         <div className="p-4 border-b flex justify-between items-center">
           <div className="flex items-center gap-2">
             <h1 className="font-semibold text-xl">Turbo Assistant</h1>
-            {/* {messages.length > 0 && (
-              <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
-                {Math.min(messages.length, 10)} messages in context
+            {isSaving && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                <span>Saving...</span>
               </div>
-            )} */}
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button 
@@ -303,14 +438,41 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
                 </div>
               </div>
             )}
-            {messages.map((msg) => (
-            <ChatMessage
-                key={msg.id}
-                role={msg.role}
-                content={msg.content}
-                timestamp={msg.timestamp}
-            />
-            ))}
+            {messages.map((msg, index) => {
+              console.log(`Processing message ${index}:`, msg.id)
+              
+              const handleReplacementUsed = (replacementId: string) => {
+                // Find the replacement text
+                const replacement = msg.replacements?.find(r => r.id === replacementId)
+                if (replacement && typeof window !== 'undefined' && 'replaceSelectedText' in window) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  (window as any).replaceSelectedText(replacement.text)
+                  
+                  // Mark this replacement as used
+                  setMessages(prev => prev.map(message => 
+                    message.id === msg.id 
+                      ? { 
+                          ...message, 
+                          usedReplacements: new Set([...(message.usedReplacements || []), replacementId])
+                        }
+                      : message
+                  ))
+                }
+              }
+              
+              return (
+                <div key={msg.id}>
+                  <ChatMessage
+                    role={msg.role}
+                    content={msg.content}
+                    timestamp={msg.timestamp}
+                    replacements={msg.replacements}
+                    usedReplacements={msg.usedReplacements}
+                    onReplacementUsed={handleReplacementUsed}
+                  />
+                </div>
+              )
+            })}
             {error && (
               <div className="text-sm text-red-600 bg-red-50 dark:bg-red-950 p-2 rounded">
                 {error}
@@ -322,7 +484,7 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
         {/* Input - fixed at bottom */}
         <div className="border-t p-4">
             <div className="relative">
-                {selectedText && selectedText.trim() && (
+                {showSelectedTextContext && selectedText && selectedText.trim() && (
                   <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded text-xs text-blue-700 dark:text-blue-300">
                     <div className="font-medium mb-1">📄 Selected text will be included as context</div>
                     <div className="truncate">{selectedText.length > 100 ? `${selectedText.substring(0, 100)}...` : selectedText}</div>
@@ -375,7 +537,7 @@ Be concise, helpful, and encouraging. You have access to the conversation histor
             <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1">
                     <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    <span>OpenAI GPT-3.5</span>
+                    <span>OpenAI {getModelDisplayName(currentModel)}</span>
                 </div>
                 <div className="text-xs opacity-60">
                     Press Enter to send

@@ -3,7 +3,7 @@ import { LLMProvider, LLMMessage } from "./base"
 export const OpenAIProvider: LLMProvider = {
   name: "openai",
 
-  async stream(messages: LLMMessage[], apiKey: string) {
+  async stream(messages: LLMMessage[], apiKey: string, model: string = "gpt-3.5-turbo") {
     try {
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -12,7 +12,7 @@ export const OpenAIProvider: LLMProvider = {
           Authorization: `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: "gpt-3.5-turbo",
+          model,
           messages,
           stream: true,
           temperature: 0.7,

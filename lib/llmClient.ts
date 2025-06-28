@@ -14,14 +14,15 @@ export type LLMMessage = {
       this.apiKey = apiKey
     }
   
-    async *streamResponse(messages: LLMMessage[]): AsyncGenerator<string> {
+    async *streamResponse(messages: LLMMessage[], model?: string): AsyncGenerator<string> {
       const res = await fetch(this.apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider: this.provider,
           messages,
-          apiKey: this.apiKey
+          apiKey: this.apiKey,
+          model
         })
       })
   

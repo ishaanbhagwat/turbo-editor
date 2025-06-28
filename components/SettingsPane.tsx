@@ -1,17 +1,35 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
+import { getSettings, updateSetting, MODEL_NAMES } from "@/lib/settings"
 
 interface SettingsPaneProps {
   isOpen: boolean
   onClose: () => void
+  onClearContent?: () => void
 }
 
-export function SettingsPane({ isOpen, onClose }: SettingsPaneProps) {
+export function SettingsPane({ isOpen, onClose, onClearContent }: SettingsPaneProps) {
+  const [settings, setSettings] = useState({
+    defaultModel: "gpt-3.5-turbo",
+    autoSave: true,
+    spellCheck: true,
+    wordWrap: true,
+    contextAware: true,
+    autoScroll: true,
+    defaultExportFormat: "pdf",
+    includeTimestamp: true
+  })
+
+  // Load settings after component mounts
+  useEffect(() => {
+    setSettings(getSettings())
+  }, [])
+
   // Close on escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -24,6 +42,8 @@ export function SettingsPane({ isOpen, onClose }: SettingsPaneProps) {
       document.addEventListener("keydown", handleEscape)
       // Prevent body scroll when settings is open
       document.body.style.overflow = "hidden"
+      // Reload settings when opening
+      setSettings(getSettings())
     }
 
     return () => {
@@ -31,6 +51,12 @@ export function SettingsPane({ isOpen, onClose }: SettingsPaneProps) {
       document.body.style.overflow = "unset"
     }
   }, [isOpen, onClose])
+
+  const handleSettingChange = <K extends keyof typeof settings>(key: K, value: typeof settings[K]) => {
+    const newSettings = { ...settings, [key]: value }
+    setSettings(newSettings)
+    updateSetting(key, value)
+  }
 
   return (
     <>
@@ -88,22 +114,52 @@ export function SettingsPane({ isOpen, onClose }: SettingsPaneProps) {
                   <Label htmlFor="auto-save" className="text-sm">
                     Auto-save
                   </Label>
-                  <Switch id="auto-save" />
+                  <Switch 
+                    id="auto-save" 
+                    checked={settings.autoSave}
+                    onCheckedChange={(checked) => handleSettingChange('autoSave', checked)}
+                  />
                 </div>
                 
                 <div className="flex items-center justify-between">
                   <Label htmlFor="spell-check" className="text-sm">
                     Spell check
                   </Label>
-                  <Switch id="spell-check" defaultChecked />
+                  <Switch 
+                    id="spell-check" 
+                    checked={settings.spellCheck}
+                    onCheckedChange={(checked) => handleSettingChange('spellCheck', checked)}
+                  />
                 </div>
                 
                 <div className="flex items-center justify-between">
                   <Label htmlFor="word-wrap" className="text-sm">
                     Word wrap
                   </Label>
-                  <Switch id="word-wrap" defaultChecked />
+                  <Switch 
+                    id="word-wrap" 
+                    checked={settings.wordWrap}
+                    onCheckedChange={(checked) => handleSettingChange('wordWrap', checked)}
+                  />
                 </div>
+
+                {onClearContent && (
+                  <div className="pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        if (confirm("Are you sure you want to clear all saved content? This cannot be undone.")) {
+                          onClearContent()
+                          onClose()
+                        }
+                      }}
+                    >
+                      Clear Saved Content
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -121,11 +177,12 @@ export function SettingsPane({ isOpen, onClose }: SettingsPaneProps) {
                   <select
                     id="model"
                     className="w-full p-2 border rounded-md bg-background text-foreground"
-                    defaultValue="gpt-3.5-turbo"
+                    value={settings.defaultModel}
+                    onChange={(e) => handleSettingChange('defaultModel', e.target.value)}
                   >
-                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                    <option value="gpt-4">GPT-4</option>
-                    <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                    {Object.entries(MODEL_NAMES).map(([value, name]) => (
+                      <option key={value} value={value}>{name}</option>
+                    ))}
                   </select>
                 </div>
                 
@@ -133,14 +190,22 @@ export function SettingsPane({ isOpen, onClose }: SettingsPaneProps) {
                   <Label htmlFor="context-aware" className="text-sm">
                     Context-aware responses
                   </Label>
-                  <Switch id="context-aware" defaultChecked />
+                  <Switch 
+                    id="context-aware" 
+                    checked={settings.contextAware}
+                    onCheckedChange={(checked) => handleSettingChange('contextAware', checked)}
+                  />
                 </div>
                 
                 <div className="flex items-center justify-between">
                   <Label htmlFor="auto-scroll" className="text-sm">
                     Auto-scroll to new messages
                   </Label>
-                  <Switch id="auto-scroll" defaultChecked />
+                  <Switch 
+                    id="auto-scroll" 
+                    checked={settings.autoScroll}
+                    onCheckedChange={(checked) => handleSettingChange('autoScroll', checked)}
+                  />
                 </div>
               </div>
             </div>
@@ -159,7 +224,8 @@ export function SettingsPane({ isOpen, onClose }: SettingsPaneProps) {
                   <select
                     id="default-format"
                     className="w-full p-2 border rounded-md bg-background text-foreground"
-                    defaultValue="pdf"
+                    value={settings.defaultExportFormat}
+                    onChange={(e) => handleSettingChange('defaultExportFormat', e.target.value)}
                   >
                     <option value="pdf">PDF</option>
                     <option value="docx">Word Document</option>
@@ -171,7 +237,11 @@ export function SettingsPane({ isOpen, onClose }: SettingsPaneProps) {
                   <Label htmlFor="include-timestamp" className="text-sm">
                     Include timestamp in filename
                   </Label>
-                  <Switch id="include-timestamp" defaultChecked />
+                  <Switch 
+                    id="include-timestamp" 
+                    checked={settings.includeTimestamp}
+                    onCheckedChange={(checked) => handleSettingChange('includeTimestamp', checked)}
+                  />
                 </div>
               </div>
             </div>

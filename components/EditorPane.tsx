@@ -1,23 +1,79 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { ThemeToggle } from "./ThemeToggle"
-import { ExportButton } from "./ExportButton"
-import { SettingsPane } from "./SettingsPane"
+import { ThemeToggle } from "@/components/ThemeToggle"
+import { ExportButton } from "@/components/ExportButton"
+import { SettingsPane } from "@/components/SettingsPane"
 
 interface EditorPaneProps {
   onTextSelect?: (text: string) => void
 }
 
+const AUTOSAVE_KEY = "turbo-editor-content"
+const AUTOSAVE_DELAY = 1000 // 1 second delay
+
 export default function EditorPane({ onTextSelect }: EditorPaneProps) {
   const [content, setContent] = useState("")
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [currentSelection, setCurrentSelection] = useState<{ start: number; end: number; text: string } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
+
+  // Load content from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedContent = localStorage.getItem(AUTOSAVE_KEY)
+      if (savedContent) {
+        setContent(savedContent)
+      }
+    } catch (error) {
+      console.warn("Failed to load saved content:", error)
+    }
+  }, [])
+
+  // Autosave function
+  const saveContent = (contentToSave: string) => {
+    try {
+      localStorage.setItem(AUTOSAVE_KEY, contentToSave)
+      setIsSaving(false)
+    } catch (error) {
+      console.error("Failed to save content:", error)
+      setIsSaving(false)
+    }
+  }
+
+  // Debounced autosave
+  const debouncedSave = useCallback((contentToSave: string) => {
+    setIsSaving(true)
+    
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    // Set new timeout
+    saveTimeoutRef.current = setTimeout(() => {
+      saveContent(contentToSave)
+    }, AUTOSAVE_DELAY)
+  }, [])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = e.target.value
     setContent(newContent)
+    
+    // Trigger autosave
+    debouncedSave(newContent)
   }
 
   const handleTextareaSelect = () => {
@@ -26,7 +82,68 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
         textareaRef.current.selectionStart,
         textareaRef.current.selectionEnd
       )
-      onTextSelect(selection)
+      
+      if (selection.trim()) {
+        const selectionRange = {
+          start: textareaRef.current.selectionStart,
+          end: textareaRef.current.selectionEnd,
+          text: selection
+        }
+        setCurrentSelection(selectionRange)
+        onTextSelect(selection)
+      } else {
+        setCurrentSelection(null)
+        onTextSelect("")
+      }
+    }
+  }
+
+  // Function to replace selected text with new content
+  const replaceSelectedText = useCallback((newText: string) => {
+    if (!currentSelection || !textareaRef.current) return
+
+    const beforeSelection = content.substring(0, currentSelection.start)
+    const afterSelection = content.substring(currentSelection.end)
+    const newContent = beforeSelection + newText + afterSelection
+    
+    setContent(newContent)
+    debouncedSave(newContent)
+    
+    // Clear the selection after replacement
+    setCurrentSelection(null)
+    
+    // Focus back to textarea and set cursor position after the replaced text
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus()
+        const newCursorPosition = currentSelection.start + newText.length
+        textareaRef.current.setSelectionRange(newCursorPosition, newCursorPosition)
+      }
+    }, 100)
+  }, [currentSelection, content, debouncedSave])
+
+  // Expose replaceSelectedText function to parent component
+  useEffect(() => {
+    if (onTextSelect) {
+      // Add the replace function to the window object for global access
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).replaceSelectedText = replaceSelectedText
+    }
+    
+    return () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (window as any).replaceSelectedText
+    }
+  }, [currentSelection, content, onTextSelect, replaceSelectedText])
+
+  // Clear saved content (for settings or manual clear)
+  const clearSavedContent = () => {
+    try {
+      localStorage.removeItem(AUTOSAVE_KEY)
+      setContent("")
+      setCurrentSelection(null)
+    } catch (error) {
+      console.error("Failed to clear saved content:", error)
     }
   }
 
@@ -44,6 +161,17 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
             <div className="text-sm text-muted-foreground">
               {wordCount} words • {charCount} characters
             </div>
+            {isSaving && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                <span>Saving...</span>
+              </div>
+            )}
+            {currentSelection && (
+              <div className="text-xs text-muted-foreground">
+                {currentSelection.text.length} chars selected
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -78,6 +206,8 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
               value={content}
               onChange={handleTextareaChange}
               onSelect={handleTextareaSelect}
+              onMouseUp={handleTextareaSelect}
+              onKeyUp={handleTextareaSelect}
               placeholder="Start writing your masterpiece..."
               className="w-full h-full min-h-[400px] p-4 resize-none border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
             />
@@ -88,7 +218,8 @@ export default function EditorPane({ onTextSelect }: EditorPaneProps) {
       {/* Settings pane overlay */}
       <SettingsPane 
         isOpen={isSettingsOpen} 
-        onClose={() => setIsSettingsOpen(false)} 
+        onClose={() => setIsSettingsOpen(false)}
+        onClearContent={clearSavedContent}
       />
     </div>
   )
