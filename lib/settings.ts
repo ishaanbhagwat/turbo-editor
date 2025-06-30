@@ -11,7 +11,7 @@ export interface Settings {
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  defaultModel: "gpt-3.5-turbo",
+  defaultModel: "gpt-4.1-nano",
   autoSave: true,
   spellCheck: true,
   wordWrap: true,
@@ -70,8 +70,12 @@ export function updateSetting<K extends keyof Settings>(key: K, value: Settings[
 // Model display names
 export const MODEL_NAMES: Record<string, string> = {
   "gpt-3.5-turbo": "GPT-3.5 Turbo",
-  "gpt-4": "GPT-4",
-  "gpt-4-turbo": "GPT-4 Turbo"
+  "gpt-4o": "GPT-4o",
+  "gpt-4o-mini": "GPT-4o Mini",
+  "gpt-4.1-mini": "GPT-4.1 Mini",
+  "gpt-4.1-nano": "GPT-4.1 Nano",
+  "gpt-4-turbo": "GPT-4 Turbo",
+  "gpt-4-turbo-preview": "GPT-4 Turbo Preview"
 }
 
 export function getModelDisplayName(model: string): string {

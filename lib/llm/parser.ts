@@ -1,15 +1,12 @@
 import { LLMReplacement, LLMInsertion } from '@/lib/types'
 
 export function parseLLMResponse(rawContent: string): { response: string; replacements: LLMReplacement[]; insertions: LLMInsertion[] } {
-  console.log('Parsing LLM response:', rawContent)
-  
   try {
     // Try to parse as JSON first
     const parsed = JSON.parse(rawContent.trim())
     
     // Validate the structure
     if (parsed && typeof parsed.response === 'string') {
-      console.log('Successfully parsed JSON response')
       return {
         response: parsed.response,
         replacements: Array.isArray(parsed.replacements) ? parsed.replacements.map((r: LLMReplacement) => ({
@@ -19,8 +16,8 @@ export function parseLLMResponse(rawContent: string): { response: string; replac
         insertions: Array.isArray(parsed.insertions) ? parsed.insertions : []
       }
     }
-  } catch (error) {
-    console.log('Failed to parse as JSON:', error)
+  } catch {
+    // Silently continue to fallback parsing
   }
   
   // Try to extract partial JSON content for streaming
@@ -128,11 +125,6 @@ export function parseLLMResponse(rawContent: string): { response: string; replac
   }
 
   if (partialResponse || partialReplacements.length > 0 || partialInsertions.length > 0) {
-    console.log('Extracted partial content:', {
-      response: partialResponse,
-      replacements: partialReplacements.length,
-      insertions: partialInsertions.length
-    })
     return {
       response: partialResponse || '',
       replacements: partialReplacements,
@@ -145,8 +137,6 @@ export function parseLLMResponse(rawContent: string): { response: string; replac
   if (incompleteMatch) {
     const partialResponse = incompleteMatch[1]
     if (partialResponse) {
-      console.log('Extracted partial response from incomplete JSON:', partialResponse)
-      
       // Also try to extract replacements and insertions from the incomplete JSON
       let partialReplacements: LLMReplacement[] = []
       let partialInsertions: LLMInsertion[] = []
@@ -163,8 +153,8 @@ export function parseLLMResponse(rawContent: string): { response: string; replac
               type: r.type || 'replacement'
             }))
           }
-        } catch (e) {
-          console.log('Failed to parse partial replacements from incomplete JSON:', e)
+        } catch {
+          // Silently continue to fallback parsing
         }
       }
       
@@ -177,8 +167,8 @@ export function parseLLMResponse(rawContent: string): { response: string; replac
           if (Array.isArray(parsedInsertions)) {
             partialInsertions = parsedInsertions
           }
-        } catch (e) {
-          console.log('Failed to parse partial insertions from incomplete JSON:', e)
+        } catch {
+          // Silently continue to fallback parsing
         }
       }
       
@@ -196,7 +186,6 @@ export function parseLLMResponse(rawContent: string): { response: string; replac
     try {
       const parsed = JSON.parse(jsonMatch[1].trim())
       if (parsed && typeof parsed.response === 'string') {
-        console.log('Successfully parsed JSON from markdown block')
         return {
           response: parsed.response,
           replacements: Array.isArray(parsed.replacements) ? parsed.replacements.map((r: LLMReplacement) => ({
@@ -206,8 +195,8 @@ export function parseLLMResponse(rawContent: string): { response: string; replac
           insertions: Array.isArray(parsed.insertions) ? parsed.insertions : []
         }
       }
-    } catch (error) {
-      console.log('Failed to parse JSON from markdown block:', error)
+    } catch {
+      // Silently continue to fallback parsing
     }
   }
   
@@ -217,7 +206,6 @@ export function parseLLMResponse(rawContent: string): { response: string; replac
   
   if (looksLikeJson) {
     // This looks like malformed JSON - return empty to prevent showing raw JSON
-    console.log('Content looks like malformed JSON, returning empty response')
     return {
       response: "",
       replacements: [],
@@ -225,7 +213,6 @@ export function parseLLMResponse(rawContent: string): { response: string; replac
     }
   } else {
     // This looks like simple text - return the raw content
-    console.log('Content appears to be simple text, returning raw content')
     return {
       response: rawContent,
       replacements: [],

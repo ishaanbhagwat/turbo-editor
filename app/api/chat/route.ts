@@ -8,11 +8,7 @@ export async function POST(req: NextRequest) {
     const cookieStore = await cookies()
     const apiKey = cookieStore.get("llm_api_key")?.value
     
-    console.log("Chat route - All headers:", Object.fromEntries(req.headers.entries()))
-    console.log("Chat route - API key from cookie:", apiKey ? "FOUND" : "NOT FOUND")
-    
     if (!apiKey) {
-      console.log("Chat route - No API key in cookies")
       return new Response(
         JSON.stringify({ error: "Missing API key" }), 
         { 
@@ -61,7 +57,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    console.log("Chat route - Calling LLM provider with key length:", apiKey.length, "model:", model)
     const llm = getProvider(provider)
     const stream = await llm.stream(messages, apiKey, model)
 

@@ -27,7 +27,7 @@ describe('Settings Utilities', () => {
       const settings = getSettings()
       
       expect(settings).toEqual({
-        defaultModel: 'gpt-3.5-turbo',
+        defaultModel: 'gpt-4.1-nano',
         autoSave: true,
         spellCheck: true,
         wordWrap: true,
@@ -40,7 +40,7 @@ describe('Settings Utilities', () => {
 
     it('returns saved settings from localStorage', () => {
       const savedSettings = {
-        defaultModel: 'gpt-4',
+        defaultModel: 'gpt-4o',
         autoSave: false,
         theme: 'dark'
       }
@@ -61,14 +61,14 @@ describe('Settings Utilities', () => {
 
     it('merges default settings with saved settings', () => {
       const savedSettings = {
-        defaultModel: 'gpt-4'
+        defaultModel: 'gpt-4o'
       }
       localStorageMock.getItem.mockReturnValue(JSON.stringify(savedSettings))
       
       const settings = getSettings()
       
       expect(settings).toEqual({
-        defaultModel: 'gpt-4',
+        defaultModel: 'gpt-4o',
         autoSave: true,
         spellCheck: true,
         wordWrap: true,
@@ -86,9 +86,9 @@ describe('Settings Utilities', () => {
       expect(displayName).toBe('GPT-3.5 Turbo')
     })
 
-    it('returns correct display name for gpt-4', () => {
-      const displayName = getModelDisplayName('gpt-4')
-      expect(displayName).toBe('GPT-4')
+    it('returns correct display name for gpt-4o', () => {
+      const displayName = getModelDisplayName('gpt-4o')
+      expect(displayName).toBe('GPT-4o')
     })
 
     it('returns model name for unknown models', () => {

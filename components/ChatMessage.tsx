@@ -1,28 +1,84 @@
 import { cn } from "@/lib/utils"
 import { LLMReplacement, LLMInsertion } from "@/lib/types"
+import { useState } from "react"
 
 interface ChatMessageProps {
   role: "user" | "assistant" | "system"
   content: string
   timestamp?: Date
+  selectedText?: string
   replacements?: LLMReplacement[]
   insertions?: LLMInsertion[]
   usedReplacements?: Set<string>
   usedInsertions?: Set<string>
   onReplacementUsed?: (replacementId: string) => void
   onInsertionUsed?: (insertionId: string) => void
+  onRetry?: () => void
+}
+
+// Component to display selected text context
+function SelectedTextContext({ text }: { text: string }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const lines = text.split('\n')
+  const shouldTruncate = lines.length > 1 || text.length > 100
+  
+  // Show only first line or first 100 characters when collapsed
+  const displayText = isExpanded ? text : (lines.length > 1 ? lines[0] : text.substring(0, 100))
+  const remainingLines = lines.length - 1
+  const remainingChars = text.length - 100
+
+  return (
+    <div className="mb-3">
+      <div className="bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md p-3 text-sm">
+        <div className="text-xs text-gray-500 dark:text-gray-400 mb-2 font-medium">
+          Selected text context:
+        </div>
+        <div className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+          {displayText}
+          {shouldTruncate && !isExpanded && (
+            <span className="text-gray-400">...</span>
+          )}
+        </div>
+        {shouldTruncate && (
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="mt-2 text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-medium flex items-center gap-1 transition-colors"
+          >
+            <span>
+              {isExpanded 
+                ? 'Show less' 
+                : lines.length > 1 
+                  ? `Show ${remainingLines} more line${remainingLines > 1 ? 's' : ''}`
+                  : `Show ${remainingChars} more characters`
+              }
+            </span>
+            <svg 
+              className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export function ChatMessage({ 
   role, 
   content, 
   timestamp, 
+  selectedText,
   replacements, 
   insertions,
   usedReplacements, 
   usedInsertions,
   onReplacementUsed, 
-  onInsertionUsed 
+  onInsertionUsed,
+  onRetry
 }: ChatMessageProps) {
   const isUser = role === "user"
   const isSystem = role === "system"
@@ -109,9 +165,6 @@ export function ChatMessage({
 
   // Function to render content with replacement containers
   const renderContent = () => {
-    console.log('ChatMessage renderContent - role:', role, 'replacements:', replacements, 'insertions:', insertions)
-    console.log('ChatMessage - content:', content)
-    
     // Special handling for "Generating..." state
     if (content === "Generating...") {
       return (
@@ -128,14 +181,32 @@ export function ChatMessage({
       )
     }
     
+    // Special handling for error messages
+    if (content.startsWith('❌')) {
+      return (
+        <div className="text-sm leading-relaxed">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 p-3 rounded-md">
+            <div className="text-red-800 dark:text-red-200 mb-3">
+              {renderFormattedText(content)}
+            </div>
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-md transition-colors font-medium"
+              >
+                🔄 Retry
+              </button>
+            )}
+          </div>
+        </div>
+      )
+    }
+    
     if ((!replacements || replacements.length === 0) && (!insertions || insertions.length === 0) || role !== "assistant") {
-      console.log('No replacements/insertions or not assistant, rendering plain text')
       return <div className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">{renderFormattedText(content)}</div>
     }
 
-    console.log('Processing replacements and insertions for assistant message')
-
-  return (
+    return (
       <div className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
         {/* Render the main text content - this should be clean without replacement/insertion blocks */}
         <div>{renderFormattedText(content)}</div>
@@ -225,6 +296,7 @@ export function ChatMessage({
     return (
       <div className="flex w-full mb-4 justify-end">
         <div className="max-w-[80%] rounded-lg px-3 py-2 text-sm bg-gray-800 dark:bg-gray-700 text-gray-100 dark:text-gray-100 border border-gray-700 dark:border-gray-600 relative shadow-sm">
+          {selectedText && <SelectedTextContext text={selectedText} />}
           <div className="whitespace-pre-wrap leading-relaxed">{content}</div>
         </div>
         <div className="text-[10px] text-gray-400 dark:text-gray-400 ml-2 mt-1 self-end">

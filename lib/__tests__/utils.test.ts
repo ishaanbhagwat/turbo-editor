@@ -157,9 +157,9 @@ describe('Settings', () => {
       expect(displayName).toBe('GPT-3.5 Turbo')
     })
 
-    it('returns correct display name for gpt-4', () => {
-      const displayName = getModelDisplayName('gpt-4')
-      expect(displayName).toBe('GPT-4')
+    it('returns correct display name for gpt-4o', () => {
+      const displayName = getModelDisplayName('gpt-4o')
+      expect(displayName).toBe('GPT-4o')
     })
 
     it('returns correct display name for gpt-4-turbo', () => {

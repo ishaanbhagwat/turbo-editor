@@ -14,6 +14,7 @@ interface Message {
     role: "user" | "assistant" | "system"
     content: string
     timestamp: Date
+    selectedText?: string // Store selected text separately to avoid duplication
     replacements?: LLMReplacement[]
     insertions?: LLMInsertion[]
     usedReplacements?: Set<string> // Track which replacements have been used
@@ -58,9 +59,10 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
           // Convert timestamp strings back to Date objects and filter out system messages
           const messagesWithDates = parsedMessages
             .filter((msg: { role: string }) => msg.role !== "system")
-            .map((msg: { role: string; content: string; timestamp: string; id: string; usedReplacements?: string[]; usedInsertions?: string[] }) => ({
+            .map((msg: { role: string; content: string; timestamp: string; id: string; selectedText?: string; usedReplacements?: string[]; usedInsertions?: string[] }) => ({
               ...msg,
               timestamp: new Date(msg.timestamp),
+              selectedText: msg.selectedText, // Preserve selectedText field
               usedReplacements: msg.usedReplacements ? new Set(msg.usedReplacements) : new Set(),
               usedInsertions: msg.usedInsertions ? new Set(msg.usedInsertions) : new Set()
             }))
@@ -79,6 +81,7 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
         // Convert Set objects to arrays for JSON serialization
         const serializedMessages = messagesToSaveFiltered.map(msg => ({
           ...msg,
+          selectedText: msg.selectedText, // Preserve selectedText field
           usedReplacements: msg.usedReplacements ? Array.from(msg.usedReplacements) : [],
           usedInsertions: msg.usedInsertions ? Array.from(msg.usedInsertions) : []
         }))
@@ -195,6 +198,28 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
       localStorage.removeItem(CHAT_HISTORY_KEY)
     }
 
+    // Retry function for failed messages
+    const handleRetry = async (messageId: string) => {
+      // Find the message to retry
+      const messageToRetry = messages.find(msg => msg.id === messageId)
+      if (!messageToRetry || messageToRetry.role !== 'assistant') return
+      
+      // Find the user message that preceded this assistant message
+      const messageIndex = messages.findIndex(msg => msg.id === messageId)
+      if (messageIndex <= 0) return
+      
+      const userMessage = messages[messageIndex - 1]
+      if (userMessage.role !== 'user') return
+      
+      // Remove the failed assistant message
+      setMessages(prev => prev.filter(msg => msg.id !== messageId))
+      
+      // Retry the request
+      setIsLoading(true)
+      setError(null)
+      await streamLLMResponse(userMessage.content)
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!input.trim() || !hasKey) return
@@ -202,8 +227,9 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
         const userMessage: Message = {
           id: crypto.randomUUID(),
           role: "user",
-          content: input,
+          content: input, // Store only the user's input, not the selected text
           timestamp: new Date(Date.now()),
+          selectedText: selectedText && selectedText.trim() ? selectedText : undefined, // Only store if not empty
           usedReplacements: new Set(),
           usedInsertions: new Set()
         }
@@ -228,6 +254,7 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
           role: "assistant",
           content: "Generating...",
           timestamp: new Date(Date.now()),
+          selectedText: selectedText,
           usedReplacements: new Set(),
           usedInsertions: new Set()
         }
@@ -254,6 +281,12 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
         }
     
         try {
+          // Add timeout to prevent hanging requests
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => {
+            controller.abort()
+          }, 60000) // 60 second timeout
+          
           const res = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -264,8 +297,11 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
                 { role: "user" as const, content: finalUserMessage }
               ],
               model: currentModel
-            })
+            }),
+            signal: controller.signal
           })
+          
+          clearTimeout(timeoutId)
 
           if (!res.ok) {
             const errorData = await res.json().catch(() => ({}))
@@ -296,6 +332,7 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
                 // Final parsing to extract structured data
                 try {
                   const finalParsed = parseLLMResponse(rawJsonResponse)
+                  
                   if (finalParsed.response && finalParsed.response !== rawJsonResponse) {
                     // Successfully parsed final JSON
                     setMessages(prev => {
@@ -314,23 +351,40 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
                       return finalMessages
                     })
                   } else {
-                    // JSON was incomplete - show error state
+                    // JSON was incomplete - show error state with details
                     setMessages(prev => {
                       const errorMessages = prev.map((msg) =>
                         msg.id === assistantMessage.id
-                          ? { ...msg, content: "❌ LLM response was incomplete. Please try regenerating the response." }
+                          ? { 
+                              ...msg, 
+                              content: `❌ LLM response was incomplete (${rawJsonResponse.length} chars received). The AI may have been cut off mid-response. Please try regenerating.` 
+                            }
                           : msg
                       )
                       debouncedSaveChat(errorMessages)
                       return errorMessages
                     })
                   }
-                } catch {
-                  // Final parsing failed - show error state
+                } catch (parseError) {
+                  // Final parsing failed - show error state with details
+                  let specificError = "Unknown parsing error"
+                  if (parseError instanceof Error) {
+                    if (parseError.message.includes('Unexpected end of JSON input')) {
+                      specificError = "Response was cut off mid-JSON"
+                    } else if (parseError.message.includes('Unexpected token')) {
+                      specificError = "Response contains malformed JSON"
+                    } else {
+                      specificError = parseError.message
+                    }
+                  }
+                  
                   setMessages(prev => {
                     const errorMessages = prev.map((msg) =>
                       msg.id === assistantMessage.id
-                        ? { ...msg, content: "❌ LLM response was malformed. Please try regenerating the response." }
+                        ? { 
+                            ...msg, 
+                            content: `❌ LLM response was malformed. ${specificError}. Raw response: ${rawJsonResponse.substring(0, 100)}...` 
+                          }
                         : msg
                     )
                     debouncedSaveChat(errorMessages)
@@ -354,12 +408,10 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
                       // We have valid parsed text - stream it immediately
                       if (!hasStartedStreaming) {
                         hasStartedStreaming = true
-                        console.log("Starting to stream parsed content")
                       }
                       
                       // Only update if we have new content to show
                       if (parsed.response !== lastParsedResponse) {
-                        console.log("Streaming new content:", parsed.response.substring(lastParsedResponse.length, lastParsedResponse.length + 50) + "...")
                         setMessages(prev => {
                           const updatedMessages = prev.map((msg) =>
                             msg.id === assistantMessage.id
@@ -377,10 +429,6 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
                       }
                     } else if (parsed.replacements.length > 0 || parsed.insertions.length > 0) {
                       // We have structured data even if no response text yet
-                      console.log("Detected structured data:", {
-                        replacements: parsed.replacements.length,
-                        insertions: parsed.insertions.length
-                      })
                       setMessages(prev => {
                         const updatedMessages = prev.map((msg) =>
                           msg.id === assistantMessage.id
@@ -396,14 +444,13 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
                       })
                     }
                   } catch {
-                    // Parsing failed - keep accumulating JSON
-                    console.log("Parsing failed, continuing to accumulate JSON")
+                    // Silently continue - this is expected for incomplete SSE data
                   }
                   
                   scrollToBottom()
                 }
-              } catch (parseError) {
-                console.warn("Failed to parse SSE data:", parseError)
+              } catch {
+                // Silently continue - this is expected for incomplete SSE data
               }
             }
 
@@ -411,7 +458,16 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
           }
         } catch (err) {
           console.error("LLM error:", err)
-          const errorMessage = err instanceof Error ? err.message : "Failed to get response from AI"
+          
+          let errorMessage = "Failed to get response from AI"
+          if (err instanceof Error) {
+            if (err.name === 'AbortError') {
+              errorMessage = "Request timed out after 60 seconds. Please try again."
+            } else {
+              errorMessage = err.message
+            }
+          }
+          
           setError(errorMessage)
           
           // Check if this is an API key error
@@ -420,11 +476,14 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
             setHasKey(false) // Mark as no valid key
           }
           
-          // Update the assistant message to show error
+          // Update the assistant message to show specific error
           setMessages(prev => {
             const errorMessages = prev.map((msg) =>
               msg.id === assistantMessage.id
-                ? { ...msg, content: "Sorry, I encountered an error. Please try again." }
+                ? { 
+                    ...msg, 
+                    content: `❌ Error: ${errorMessage}. Please check your API key and try again.` 
+                  }
                 : msg
             )
             // Save even error messages
@@ -563,9 +622,7 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
                 </div>
               </div>
             )}
-            {messages.map((msg, index) => {
-              console.log(`Processing message ${index}:`, msg.id)
-              
+            {messages.map((msg) => {
               const handleReplacementUsed = (replacementId: string) => {
                 // Find the replacement text
                 const replacement = msg.replacements?.find(r => r.id === replacementId)
@@ -591,12 +648,9 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
               }
               
               const handleInsertionUsed = (insertionId: string) => {
-                console.log('handleInsertionUsed called with insertionId:', insertionId)
                 // Find the insertion text
                 const insertion = msg.insertions?.find(i => i.id === insertionId)
-                console.log('Found insertion:', insertion)
                 if (insertion && typeof window !== 'undefined' && 'insertTextAtCursor' in window) {
-                  console.log('Calling insertTextAtCursor with text:', insertion.text)
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   const insertFunction = (window as any).insertTextAtCursor
                   if (typeof insertFunction === 'function') {
@@ -628,12 +682,14 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
                     role={msg.role}
                     content={msg.content}
                     timestamp={msg.timestamp}
+                    selectedText={msg.selectedText}
                     replacements={msg.replacements}
                     insertions={msg.insertions}
                     usedReplacements={msg.usedReplacements}
                     usedInsertions={msg.usedInsertions}
                     onReplacementUsed={handleReplacementUsed}
                     onInsertionUsed={handleInsertionUsed}
+                    onRetry={msg.content.startsWith('❌') ? () => handleRetry(msg.id) : undefined}
                   />
                 </div>
               )
@@ -643,6 +699,7 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
                 {error}
               </div>
             )}
+            
             <div ref={scrollRef} />
         </div>
 
