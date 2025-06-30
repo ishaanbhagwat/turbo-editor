@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { ChatMessage } from "./ChatMessage";
 import { KeyInput } from "@/components/KeyInput"
 import { DEFAULT_SYSTEM_PROMPT } from "@/lib/prompts/system"
-import { getSettings, getModelDisplayName } from "@/lib/settings"
+import { getSettings, getModelDisplayName, MODEL_NAMES, updateSetting } from "@/lib/settings"
 import { parseLLMResponse } from "@/lib/llm/parser"
 import { LLMReplacement, LLMInsertion } from "@/lib/types"
 
@@ -25,6 +25,63 @@ interface LLMPaneProps {
   selectedText?: string
 }
 
+// Model picker dropdown component
+function ModelPicker({ currentModel, onModelChange }: { currentModel: string; onModelChange: (model: string) => void }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleModelSelect = (model: string) => {
+    onModelChange(model)
+    setIsOpen(false)
+  }
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+        <span>OpenAI {getModelDisplayName(currentModel)}</span>
+        <svg 
+          className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      
+      {isOpen && (
+        <div className="absolute bottom-full left-0 mb-1 bg-background border border-border rounded-md shadow-lg z-10 min-w-[200px] max-h-48 overflow-y-auto">
+          {Object.entries(MODEL_NAMES).map(([modelKey, displayName]) => (
+            <button
+              key={modelKey}
+              onClick={() => handleModelSelect(modelKey)}
+              className={`w-full text-left px-3 py-2 text-xs transition-colors cursor-pointer
+                ${currentModel === modelKey ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'}
+                hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-foreground`}
+            >
+              {displayName}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const CHAT_HISTORY_KEY = "turbo-chat-history"
 const CHAT_AUTOSAVE_DELAY = 500 // 500ms delay for chat
 
@@ -37,7 +94,6 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
     const [error, setError] = useState<string | null>(null)
     const [isClearingKey, setIsClearingKey] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
-    const [showSelectedTextContext, setShowSelectedTextContext] = useState(false)
     const [currentModel, setCurrentModel] = useState("gpt-3.5-turbo") // Default fallback
     const [isApiKeyInvalid, setIsApiKeyInvalid] = useState(false)
 
@@ -115,6 +171,30 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
       }
     }, [])
 
+    const checkApiKey = async () => {
+      try {
+        setIsCheckingKey(true)
+        setError(null)
+        const res = await fetch("/api/key-check")
+        if (!res.ok) {
+          throw new Error("Failed to check API key")
+        }
+        const data = await res.json()
+        setHasKey(data.exists)
+      } catch (err) {
+        console.error("Error checking API key:", err)
+        setError("Failed to check API key status")
+        setHasKey(false)
+      } finally {
+        setIsCheckingKey(false)
+      }
+    }
+
+    const handleModelChange = (newModel: string) => {
+      setCurrentModel(newModel)
+      updateSetting('defaultModel', newModel)
+    }
+
     useEffect(() => {
       checkApiKey()
     }, [])
@@ -139,32 +219,6 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
         window.removeEventListener('settingsChanged', handleSettingsChange as EventListener)
       }
     }, [])
-
-    // Show selected text context when selectedText changes
-    useEffect(() => {
-      if (selectedText && selectedText.trim()) {
-        setShowSelectedTextContext(true)
-      }
-    }, [selectedText])
-
-    const checkApiKey = async () => {
-      try {
-        setIsCheckingKey(true)
-        setError(null)
-        const res = await fetch("/api/key-check")
-        if (!res.ok) {
-          throw new Error("Failed to check API key")
-        }
-        const data = await res.json()
-        setHasKey(data.exists)
-      } catch (err) {
-        console.error("Error checking API key:", err)
-        setError("Failed to check API key status")
-        setHasKey(false)
-      } finally {
-        setIsCheckingKey(false)
-      }
-    }
 
     const handleClearKey = async () => {
       try {
@@ -237,7 +291,6 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
         const newMessages = [...messages, userMessage]
         setMessages(newMessages)
         setInput("")
-        setShowSelectedTextContext(false) // Clear the context display after sending
         scrollToBottom()
         setIsLoading(true)
         setError(null)
@@ -705,64 +758,61 @@ export default function LLMPane({ selectedText }: LLMPaneProps){
 
         {/* Input - fixed at bottom, always visible */}
         <div className="flex-shrink-0 border-t p-4 bg-background">
-            <div className="relative">
-                {showSelectedTextContext && selectedText && selectedText.trim() && (
-                  <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded text-xs text-blue-700 dark:text-blue-300">
-                    <div className="font-medium mb-1">📄 Selected text will be included as context</div>
-                    <div className="truncate">{selectedText.length > 100 ? `${selectedText.substring(0, 100)}...` : selectedText}</div>
-                  </div>
-                )}
+            <div className="rounded-xl bg-transparent p-0 flex flex-col gap-1">
+                {/* Context line - flat, no border, no background */}
+                <div className="text-xs dark:text-gray-400 mb-1 min-h-[20px] flex items-center">
+                  <span className="font-medium">Context:</span>
+                  {selectedText && selectedText.trim() && (
+                    <span className="ml-2 truncate dark:text-gray-300 border-1 rounded p-1">{selectedText.length > 80 ? `${selectedText.substring(0, 80)}...` : selectedText}</span>
+                  )}
+                </div>
+                {/* Textarea - seamless, on its own line */}
                 <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    if (input.trim() && hasKey && !isLoading) {
-                      handleSubmit(e as React.FormEvent)
-                    }
-                  }
-                }}
-                placeholder="Turbocharge your writing..."
-                className="resize-none min-h-[60px] max-h-[120px] pr-12"
-                disabled={isLoading}
-                />
-                
-                {/* Floating send button */}
-                <button
-                  onClick={(e) => {
-                    e.preventDefault()
-                    if (input.trim() && hasKey && !isLoading) {
-                      handleSubmit(e as React.FormEvent)
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      if (input.trim() && hasKey && !isLoading) {
+                        handleSubmit(e as React.FormEvent)
+                      }
                     }
                   }}
-                  disabled={!input.trim() || !hasKey || isLoading}
-                  className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:scale-105"
-                  title="Send message"
-                >
-                  <svg 
-                    width="14" 
-                    height="14" 
-                    viewBox="0 0 24 24" 
-                    fill="none" 
-                    stroke="currentColor" 
-                    strokeWidth="2" 
-                    strokeLinecap="round" 
-                    strokeLinejoin="round"
+                  placeholder="Turbocharge your writing..."
+                  className="flex-1 resize-none min-h-[64px] max-h-[120px] border-1 dark:border-0 dark:bg-transparent p-1 text-sm dark:focus:ring-0 dark:focus:outline-none dark:focus:border-0 shadow-none mb-1"
+                  style={{ boxShadow: 'none' }}
+                  disabled={isLoading}
+                />
+                {/* Controls - model picker and send button on a new line */}
+                <div className="flex items-center justify-between w-full mt-1">
+                  <ModelPicker currentModel={currentModel} onModelChange={handleModelChange} />
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      if (input.trim() && hasKey && !isLoading) {
+                        handleSubmit(e as React.FormEvent)
+                      }
+                    }}
+                    disabled={!input.trim() || !hasKey || isLoading}
+                    className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-800 dark:bg-white text-white dark:text-black hover:bg-gray-700 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors border-0 p-0 ml-2"
+                    title="Send message"
+                    style={{ boxShadow: 'none' }}
                   >
-                    <path d="m22 2-7 20-4-9-9-4 20-7z"/>
-                  </svg>
-                </button>
-            </div>
-            
-            {/* Bottom bar */}
-            <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
-                <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    <span>OpenAI {getModelDisplayName(currentModel)}</span>
-                </div>
-                <div className="text-xs opacity-60">
-                    Press Enter to send
+                    <svg 
+                      width="15" 
+                      height="15" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                      style={{ transform: 'rotate(-45deg)' }}
+                    >
+                      <path d="M5 12h14"/>
+                      <path d="m12 5 7 7-7 7"/>
+                    </svg>
+                  </button>
                 </div>
             </div>
         </div>
